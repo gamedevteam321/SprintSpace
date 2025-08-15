@@ -1,9 +1,9 @@
 app_name = "sprintspace"
-app_title = "Sprintspace"
-app_publisher = "sprintspace"
-app_description = "task management app"
-app_email = "sprintspace@gamil.com"
-app_license = "mit"
+app_title = "SprintSpace"
+app_publisher = "Cursor-Auto"
+app_description = "SprintSpace - Notion-like workspace with pages and kanban boards"
+app_email = "dev@example.com"
+app_license = "MIT"
 
 # Apps
 # ------------------
@@ -40,7 +40,7 @@ app_include_css = "/assets/sprintspace/css/editor.css"
 # webform_include_css = {"doctype": "public/css/doctype.css"}
 
 # include js in page
-# page_js = {"page" : "public/js/file.js"}
+# page_js = {"sprintspace-workspace" : "public/js/workspace.js"}
 
 # include js in doctype views
 doctype_js = {"Sprintspace Project" : "public/js/sprintspace_project.js"}
@@ -52,6 +52,45 @@ doctype_js = {"Sprintspace Project" : "public/js/sprintspace_project.js"}
 # ------------------
 # include app icons in desk
 # app_include_icons = "sprintspace/public/icons.svg"
+
+# Custom Workspaces
+# ------------------
+# Custom workspaces to be created on app installation
+workspaces = [
+	{
+		"name": "SprintSpace",
+		"title": "SprintSpace",
+		"icon": "rocket",
+		"indicator_color": "blue",
+		"is_default": 0,
+		"content": [
+			{
+				"type": "quick_list",
+				"data": {
+					"title": "Your Workspaces",
+					"quick_list_filter": {
+						"doctype": "SprintSpace Workspace",
+						"filters": [
+							["owner_user", "=", "user"]
+						]
+					}
+				}
+			},
+			{
+				"type": "quick_list", 
+				"data": {
+					"title": "Recent Pages",
+					"quick_list_filter": {
+						"doctype": "SprintSpace Page",
+						"filters": [
+							["last_edited_by", "=", "user"]
+						]
+					}
+				}
+			}
+		]
+	}
+]
 
 # Home Pages
 # ----------
