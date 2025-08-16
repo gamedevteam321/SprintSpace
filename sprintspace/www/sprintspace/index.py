@@ -1,9 +1,13 @@
 import frappe
 
 def get_context(context):
-    # Ensure user is logged in
+    # Redirect to login if not logged in
     if frappe.session.user == "Guest":
-        frappe.throw("Please login to access SprintSpace", frappe.AuthenticationError)
+        frappe.local.flags.redirect_location = "/login?redirect-to=/sprintspace"
+        raise frappe.Redirect
+    
+    # Allow all logged-in users (no role restrictions)
+    # SprintSpace is accessible to all authenticated users
     
     # Set page context
     context.no_cache = 1

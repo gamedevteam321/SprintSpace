@@ -32,6 +32,11 @@ app_include_js = ["/assets/sprintspace/js/editor.bundle.js"]
 # web_include_css = "/assets/sprintspace/css/sprintspace.css"
 # web_include_js = "/assets/sprintspace/js/sprintspace.js"
 
+# Website route configuration
+website_route_rules = [
+    {"from_route": "/sprintspace", "to_route": "sprintspace"},
+]
+
 # include custom scss in every website theme (without file extension ".scss")
 # website_theme_scss = "sprintspace/public/scss/website"
 

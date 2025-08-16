@@ -154,6 +154,13 @@
    "read": 1,
    "role": "Projects User",
    "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "All",
+   "write": 1
   }
  ],
  "quick_entry": 1,

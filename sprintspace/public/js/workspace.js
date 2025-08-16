@@ -1092,10 +1092,65 @@ class SprintSpaceWorkspaceApp {
                 '</div>';
                 break;
             case 'todolist':
-                html = '<div class="sprintspace-block" data-block-type="todolist"><div class="block-menu-wrapper"><button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button></div><div class="todolist" contenteditable="false"><div class="todolist-header" contenteditable="false"><h4 contenteditable="false">📋 Todo List</h4></div><div class="todo-item" contenteditable="false"><input type="checkbox" onchange="this.parentElement.classList.toggle(\'completed\', this.checked)"> <div class="todo-content" contenteditable="false"><span contenteditable="true" placeholder="Enter task description...">Task with assignment</span><div class="todo-meta" contenteditable="false"><span class="todo-priority" contenteditable="false" onclick="window.sprintSpaceApp.cycleTodoPriority(this)">🔴 High</span><input type="date" class="todo-due-date" title="Due Date"></div></div><div class="todo-assignees" contenteditable="false"><button class="add-assignee-btn" onclick="window.sprintSpaceApp.showAssigneeSelector(this)">👤 Add Assignee</button></div></div><button class="add-todo-item" contenteditable="false" onclick="window.sprintSpaceApp.addTodoItem(this)">+ Add Todo</button></div></div>';
+                html = '<div class="sprintspace-block" data-block-type="todolist">' +
+                    '<div class="block-menu-wrapper">' +
+                        '<button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button>' +
+                    '</div>' +
+                    '<div class="todolist" contenteditable="false">' +
+                        '<div class="todolist-header" contenteditable="false">' +
+                            '<h4 contenteditable="false">📋 Todo List</h4>' +
+                        '</div>' +
+                        '<div class="todo-item" contenteditable="false">' +
+                            '<input type="checkbox" onchange="this.parentElement.classList.toggle(\'completed\', this.checked)">' +
+                            '<div class="todo-content" contenteditable="false">' +
+                                '<span contenteditable="true" placeholder="Enter task description...">Task with assignment</span>' +
+                                '<div class="todo-meta" contenteditable="false">' +
+                                    '<span class="todo-priority" contenteditable="false" onclick="window.sprintSpaceApp.cycleTodoPriority(this)">🔴 High</span>' +
+                                    '<input type="date" class="todo-due-date" title="Due Date">' +
+                                '</div>' +
+                            '</div>' +
+                            '<div class="todo-assignees" contenteditable="false">' +
+                                '<button class="add-assignee-btn" onclick="window.sprintSpaceApp.showAssigneeSelector(this)">👤 Add Assignee</button>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
                 break;
             case 'kanban':
-                html = '<div class="sprintspace-block" data-block-type="kanban"><div class="block-menu-wrapper"><button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button></div><div class="kanban-board" contenteditable="false"><div class="kanban-header"><h3 class="kanban-title">📊 Project Board</h3><div class="kanban-controls"><button class="kanban-filter-btn">🔍 Filter</button><button class="kanban-view-btn">👁️ View</button></div></div><div class="kanban-columns"><div class="kanban-column" data-status="todo"><div class="column-header"><h4 contenteditable="false"><span class="column-icon">📋</span>To Do <span class="task-count">0</span></h4></div><div class="kanban-items" contenteditable="false"></div></div><div class="kanban-column" data-status="progress"><div class="column-header"><h4 contenteditable="false"><span class="column-icon">🔄</span>In Progress <span class="task-count">0</span></h4></div><div class="kanban-items" contenteditable="false"></div></div><div class="kanban-column" data-status="done"><div class="column-header"><h4 contenteditable="false"><span class="column-icon">✅</span>Done <span class="task-count">0</span></h4></div><div class="kanban-items" contenteditable="false"></div></div></div></div></div>';
+                html = '<div class="sprintspace-block" data-block-type="kanban">' +
+                    '<div class="block-menu-wrapper">' +
+                        '<button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button>' +
+                    '</div>' +
+                    '<div class="kanban-board" contenteditable="false">' +
+                        '<div class="kanban-header">' +
+                            '<h3 class="kanban-title">📊 Project Board</h3>' +
+                            '<div class="kanban-controls">' +
+                                '<button class="kanban-filter-btn">🔍 Filter</button>' +
+                                '<button class="kanban-view-btn">👁️ View</button>' +
+                            '</div>' +
+                        '</div>' +
+                        '<div class="kanban-columns">' +
+                            '<div class="kanban-column" data-status="todo">' +
+                                '<div class="column-header">' +
+                                    '<h4 contenteditable="false"><span class="column-icon">📋</span>To Do <span class="task-count">0</span></h4>' +
+                                '</div>' +
+                                '<div class="kanban-items" contenteditable="false"></div>' +
+                            '</div>' +
+                            '<div class="kanban-column" data-status="progress">' +
+                                '<div class="column-header">' +
+                                    '<h4 contenteditable="false"><span class="column-icon">🔄</span>In Progress <span class="task-count">0</span></h4>' +
+                                '</div>' +
+                                '<div class="kanban-items" contenteditable="false"></div>' +
+                            '</div>' +
+                            '<div class="kanban-column" data-status="done">' +
+                                '<div class="column-header">' +
+                                    '<h4 contenteditable="false"><span class="column-icon">✅</span>Done <span class="task-count">0</span></h4>' +
+                                '</div>' +
+                                '<div class="kanban-items" contenteditable="false"></div>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
                 break;
             case 'table':
                 html = '<div class="sprintspace-block" data-block-type="table"><div class="block-menu-wrapper"><button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button></div><div class="table-wrapper" contenteditable="false"><table class="sprintspace-table"><thead><tr><th contenteditable="true">Column 1</th><th contenteditable="true">Column 2</th><th class="table-add-column" contenteditable="false"><button class="add-column-btn" onclick="window.sprintSpaceApp.addTableColumn(this)" title="Add column">+</button></th></tr></thead><tbody><tr><td contenteditable="true">Cell 1</td><td contenteditable="true">Cell 2</td><td class="table-add-column" contenteditable="false"></td></tr><tr class="table-add-row"><td contenteditable="false" colspan="3"><button class="add-row-btn" onclick="window.sprintSpaceApp.addTableRow(this)" title="Add row">+ Add row</button></td></tr></tbody></table></div></div>';

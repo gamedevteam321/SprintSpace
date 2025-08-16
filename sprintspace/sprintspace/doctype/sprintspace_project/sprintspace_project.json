@@ -119,6 +119,13 @@
       "read": 1,
       "role": "Projects Manager",
       "write": 1
+    },
+    {
+      "create": 1,
+      "delete": 1,
+      "read": 1,
+      "role": "All",
+      "write": 1
     }
   ],
   "show_name_in_global_search": 1,

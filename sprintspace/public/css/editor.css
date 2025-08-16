@@ -605,6 +605,194 @@
     margin-top: 8px;
 }
 
+/* Enhanced Todo List Styles */
+.todolist {
+    margin: 8px 0;
+    border: 1px solid #e1e5e9;
+    border-radius: 8px;
+    padding: 16px;
+    background: #fafbfc;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+}
+
+.todolist-header {
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e1e5e9;
+}
+
+.todolist-header h4 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #2e3338;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.todo-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid #f1f3f5;
+    position: relative;
+}
+
+.todo-item:last-of-type {
+    border-bottom: none;
+    margin-bottom: 8px;
+}
+
+.todo-item input[type="checkbox"] {
+    margin-top: 4px;
+    width: 16px;
+    height: 16px;
+    border: 2px solid #d1d8dd;
+    border-radius: 3px;
+    background: white;
+    appearance: none;
+    outline: none;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.todo-item input[type="checkbox"]:checked {
+    background: #5e64ff;
+    border-color: #5e64ff;
+    background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='m13.854 3.646-7.207 7.207-3.147-3.147a.5.5 0 0 0-.708.708l3.5 3.5a.5.5 0 0 0 .708 0l7.5-7.5a.5.5 0 0 0-.708-.708z'/%3e%3c/svg%3e");
+}
+
+.todo-item input[type="checkbox"]:hover {
+    border-color: #8d99a6;
+}
+
+.todo-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.todo-content span[contenteditable="true"] {
+    display: block;
+    min-height: 20px;
+    padding: 4px 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: #2e3338;
+    font-size: 14px;
+    line-height: 1.5;
+    word-wrap: break-word;
+}
+
+.todo-content span[contenteditable="true"]:focus {
+    outline: none;
+    background: rgba(94, 100, 255, 0.05);
+    border-radius: 3px;
+    padding: 4px 6px;
+    margin: 0 -6px;
+}
+
+.todo-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+}
+
+.todo-priority {
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.2s ease;
+}
+
+.todo-priority:hover {
+    opacity: 0.8;
+    transform: scale(1.05);
+}
+
+.todo-due-date {
+    padding: 4px 8px;
+    border: 1px solid #d1d8dd;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #6b7280;
+    background: white;
+    outline: none;
+    cursor: pointer;
+}
+
+.todo-due-date:focus {
+    border-color: #5e64ff;
+    box-shadow: 0 0 0 2px rgba(94, 100, 255, 0.1);
+}
+
+.todo-assignees {
+    margin-left: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.add-assignee-btn {
+    padding: 4px 8px;
+    border: 1px dashed #d1d8dd;
+    border-radius: 4px;
+    background: white;
+    color: #6b7280;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.add-assignee-btn:hover {
+    border-color: #5e64ff;
+    color: #5e64ff;
+    background: rgba(94, 100, 255, 0.05);
+}
+
+.add-todo-item {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px dashed #d1d8dd;
+    border-radius: 6px;
+    background: white;
+    color: #6b7280;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.add-todo-item:hover {
+    border-color: #5e64ff;
+    color: #5e64ff;
+    background: rgba(94, 100, 255, 0.05);
+    transform: translateY(-1px);
+}
+
+.todo-item.completed {
+    opacity: 0.6;
+}
+
+.todo-item.completed .todo-content span {
+    text-decoration: line-through;
+    color: #8d99a6;
+}
+
 /* Enhanced Checklist Styles */
 .checklist {
     margin: 16px 0;
@@ -666,6 +854,24 @@
     border: 1px solid #e5e7eb;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
     overflow: hidden;
+    position: relative; /* Ensure proper stacking context */
+}
+
+/* Ensure block menu is visible for Kanban blocks */
+[data-block-type="kanban"] {
+    position: relative;
+}
+
+[data-block-type="kanban"] .block-menu-wrapper {
+    position: absolute;
+    left: -26px;
+    top: 8px;
+    z-index: 1001; /* Higher than kanban content */
+}
+
+/* Make sure Kanban block shows menu on hover */
+[data-block-type="kanban"]:hover .block-menu-wrapper {
+    opacity: 1;
 }
 
 .kanban-header {
