@@ -43,6 +43,32 @@
       statuses: ["Backlog", "To Do", "In Progress", "Review", "Done"],
       linkMode: "by_title"
     };
+    let __kanbanConfigured = false;
+    async function configureKanbanFromMeta() {
+      if (__kanbanConfigured)
+        return;
+      try {
+        const meta = await frappe.call({
+          method: "frappe.client.get_meta",
+          args: { doctype: kanbanConfig.taskDoctype }
+        });
+        const fields = meta && meta.message && meta.message.fields || [];
+        if (fields.some((f) => f.fieldname === "sprintspace_project")) {
+          kanbanConfig.projectField = "sprintspace_project";
+          kanbanConfig.linkMode = "by_name";
+        }
+        const statusFieldMeta = fields.find((f) => f.fieldname === kanbanConfig.statusField);
+        if (statusFieldMeta && statusFieldMeta.options) {
+          const opts = String(statusFieldMeta.options).split("\n").map((s) => s.trim()).filter(Boolean);
+          if (opts.length)
+            kanbanConfig.statuses = opts;
+        }
+      } catch (e) {
+        console.warn("Kanban meta config fallback:", e);
+      } finally {
+        __kanbanConfigured = true;
+      }
+    }
     class SprintSpaceKanbanTool {
       static get toolbox() {
         return {
@@ -64,6 +90,7 @@
         return this.wrapper;
       }
       async loadAndRender() {
+        await configureKanbanFromMeta();
         if (!cur_frm || !cur_frm.doc) {
           this.showError("No project context available");
           return;
@@ -282,6 +309,7 @@
           console.warn("Invalid JSON in content_json field:", e);
           data = {};
         }
+        let __saveDebounce;
         const editor = new EditorJS({
           holder: "sprintspace-editorjs-holder",
           autofocus: true,
@@ -305,12 +333,15 @@
             }]
           },
           onChange: async () => {
-            try {
-              const output = await editor.save();
-              frm.set_value("content_json", JSON.stringify(output));
-            } catch (error) {
-              console.error("Error saving editor content:", error);
-            }
+            clearTimeout(__saveDebounce);
+            __saveDebounce = setTimeout(async () => {
+              try {
+                const output = await editor.save();
+                frm.set_value("content_json", JSON.stringify(output));
+              } catch (error) {
+                console.error("Error saving editor content:", error);
+              }
+            }, 400);
           }
         });
         frm.sprintspace_editor = editor;
@@ -353,4 +384,4 @@
     });
   })();
 })();
-//# sourceMappingURL=editor.bundle.T3RWX4VY.js.map
+//# sourceMappingURL=editor.bundle.A2UUXLHA.js.map

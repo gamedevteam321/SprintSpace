@@ -150,6 +150,18 @@ def reorder_pages(workspace, page_orders):
     return True
 
 
+@frappe.whitelist()
+def get_frappe_users():
+    """Get list of Frappe users for assignment in todo lists"""
+    users = frappe.get_all(
+        "User",
+        filters={"enabled": 1, "user_type": "System User"},
+        fields=["name", "full_name", "email"],
+        order_by="full_name"
+    )
+    
+    return users
+
 def get_default_page_content():
     """Return default content for a new page"""
     return {

@@ -1,0 +1,70 @@
+{
+  "doctype": "DocType",
+  "name": "Todo Block",
+  "module": "SprintSpace",
+  "custom": 0,
+  "istable": 0,
+  "issingle": 0,
+  "editable_grid": 0,
+  "track_changes": 1,
+  "track_seen": 1,
+  "engine": "InnoDB",
+  "field_order": [
+    "content",
+    "is_checked",
+    "parent_block",
+    "page",
+    "order",
+    "progress"
+  ],
+  "fields": [
+    {
+      "fieldname": "content",
+      "fieldtype": "Small Text",
+      "label": "Content",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "is_checked",
+      "fieldtype": "Check",
+      "label": "Checked",
+      "default": "0",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "parent_block",
+      "fieldtype": "Link",
+      "options": "Todo Block",
+      "label": "Parent Block"
+    },
+    {
+      "fieldname": "page",
+      "fieldtype": "Link",
+      "options": "SprintSpace Page",
+      "label": "Page",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "order",
+      "fieldtype": "Int",
+      "label": "Order",
+      "default": 0,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "progress",
+      "fieldtype": "Percent",
+      "label": "Progress",
+      "read_only": 1,
+      "default": 0
+    }
+  ],
+  "permissions": [
+    {"role": "System Manager", "create": 1, "read": 1, "write": 1, "delete": 1},
+    {"role": "Projects Manager", "create": 1, "read": 1, "write": 1, "delete": 1},
+    {"role": "Projects User", "create": 1, "read": 1, "write": 1}
+  ]
+}
+
+

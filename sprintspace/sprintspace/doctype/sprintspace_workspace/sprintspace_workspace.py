@@ -56,6 +56,44 @@ def create_workspace(title, description=""):
     return workspace.name
 
 
+@frappe.whitelist()
+def delete_workspace(workspace_name):
+    """Delete workspace with proper validation and cascade delete of pages"""
+    # Check if workspace exists and user has permission
+    workspace = frappe.get_doc("SprintSpace Workspace", workspace_name)
+    
+    # Check if user can delete this workspace
+    if workspace.owner_user != frappe.session.user:
+        frappe.throw("You don't have permission to delete this workspace")
+    
+    # Get all pages for this workspace
+    pages = frappe.get_all(
+        "SprintSpace Page",
+        filters={"workspace": workspace_name},
+        pluck="name"
+    )
+    
+    page_count = len(pages)
+    
+    # First delete all pages
+    for page_name in pages:
+        try:
+            frappe.delete_doc("SprintSpace Page", page_name, ignore_permissions=True, force=True)
+        except Exception as e:
+            frappe.log_error(f"Error deleting page {page_name}: {str(e)}")
+    
+    # Commit page deletions
+    frappe.db.commit()
+    
+    # Now delete the workspace
+    frappe.delete_doc("SprintSpace Workspace", workspace_name, ignore_permissions=True, force=True)
+    
+    return {
+        "message": f"Workspace deleted successfully along with {page_count} page(s)",
+        "page_count": page_count
+    }
+
+
 def get_default_page_content():
     """Return default content for the first page in a workspace"""
     return {

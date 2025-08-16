@@ -25,8 +25,8 @@ app_license = "MIT"
 # ------------------
 
 # include js, css files in header of desk.html
-app_include_css = "/assets/sprintspace/css/editor.css"
-# app_include_js = "/assets/sprintspace/js/editor.bundle.js"
+app_include_css = ["/assets/sprintspace/css/editor.css"]
+app_include_js = ["/assets/sprintspace/js/editor.bundle.js"]
 
 # include js, css files in header of web template
 # web_include_css = "/assets/sprintspace/css/sprintspace.css"
@@ -43,7 +43,8 @@ app_include_css = "/assets/sprintspace/css/editor.css"
 # page_js = {"sprintspace-workspace" : "public/js/workspace.js"}
 
 # include js in doctype views
-doctype_js = {"Sprintspace Project" : "public/js/sprintspace_project.js"}
+# Disable per-Doctype script to avoid competing editors; use bundled editor instead
+# doctype_js = {"Sprintspace Project" : "public/js/sprintspace_project.js"}
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
