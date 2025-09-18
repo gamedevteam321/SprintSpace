@@ -216,12 +216,12 @@ workspaces = [
 
 # before_tests = "sprintspace.install.before_tests"
 
-# Overriding Methods
+# Overriding Methods / Exposed Methods
 # ------------------------------
-#
-# override_whitelisted_methods = {
-# 	"frappe.desk.doctype.event.event.get_events": "sprintspace.event.get_events"
-# }
+override_whitelisted_methods = {
+    "sprintspace.sprintspace.api.media.upload": "sprintspace.sprintspace.api.media.upload",
+    "sprintspace.sprintspace.api.media.link_preview": "sprintspace.sprintspace.api.media.link_preview",
+}
 #
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,

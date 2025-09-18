@@ -551,10 +551,16 @@ class SprintSpaceWorkspaceApp {
                     console.log('Content data type:', typeof contentData);
                     console.log('Content blocks:', contentData.blocks);
                     if (contentData.blocks && Array.isArray(contentData.blocks)) {
-                        console.log('Converting', contentData.blocks.length, 'blocks to HTML');
-                        initialContent = this.convertBlocksToHTML(contentData.blocks);
-                        console.log('Converted blocks to HTML:', initialContent);
-                        console.log('HTML length:', initialContent.length);
+                        // Prefer raw HTML block if present
+                        const raw = contentData.blocks.find(b => b.type === 'raw' && b.data && b.data.html);
+                        if (raw) {
+                            initialContent = raw.data.html;
+                        } else {
+                            console.log('Converting', contentData.blocks.length, 'blocks to HTML');
+                            initialContent = this.convertBlocksToHTML(contentData.blocks);
+                            console.log('Converted blocks to HTML:', initialContent);
+                            console.log('HTML length:', initialContent.length);
+                        }
                     } else {
                         console.warn('No blocks found or blocks is not an array:', contentData);
                     }
@@ -579,6 +585,9 @@ class SprintSpaceWorkspaceApp {
             editorElement.innerHTML = initialContent;
             editorElement.contentEditable = true;
             console.log('Editor content set, contentEditable:', editorElement.contentEditable);
+            
+            // Fix private file URLs in existing content
+            this.fixPrivateFileUrls(editorElement);
             
             // Clear any existing event listeners and re-initialize
             this.cleanupEditor();
@@ -791,6 +800,34 @@ class SprintSpaceWorkspaceApp {
                 action: () => this.insertBlock(editor, 'divider', '')
             }
             ,
+            {
+                title: 'Image',
+                subtitle: 'Upload or embed an image.',
+                icon: '🖼️',
+                keywords: ['image', 'picture', 'photo'],
+                action: () => this.insertBlock(editor, 'image', '')
+            },
+            {
+                title: 'Video',
+                subtitle: 'Upload or embed a video.',
+                icon: '🎬',
+                keywords: ['video', 'youtube', 'mp4', 'media'],
+                action: () => this.insertBlock(editor, 'video', '')
+            },
+            {
+                title: 'File',
+                subtitle: 'Attach a file for download.',
+                icon: '📎',
+                keywords: ['file', 'attachment', 'document'],
+                action: () => this.insertBlock(editor, 'file', '')
+            },
+            {
+                title: 'Bookmark',
+                subtitle: 'Create a rich link preview.',
+                icon: '🔖',
+                keywords: ['bookmark', 'link', 'url', 'preview'],
+                action: () => this.insertBlock(editor, 'bookmark', '')
+            },
             {
                 title: 'Timeline',
                 subtitle: 'Visual task timeline with dates and assignees.',
@@ -1224,6 +1261,55 @@ class SprintSpaceWorkspaceApp {
             case 'divider':
                 html = '<div class="sprintspace-block" data-block-type="divider"><div class="block-menu-wrapper"><button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button></div><hr></div>';
                 break;
+            case 'image':
+                html = '<div class="sprintspace-block" data-block-type="image">' +
+                    '<div class="block-menu-wrapper"><button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button></div>' +
+                    '<div class="media image-block" contenteditable="false">' +
+                        '<div class="media-toolbar">' +
+                            '<button class="btn btn-sm media-upload">Upload</button>' +
+                            '<button class="btn btn-sm media-url">From URL</button>' +
+                        '</div>' +
+                        '<div class="media-preview media-empty">Click Upload or From URL</div>' +
+                        '<input class="media-caption" placeholder="Add caption..." />' +
+                    '</div>' +
+                '</div>';
+                break;
+            case 'video':
+                html = '<div class="sprintspace-block" data-block-type="video">' +
+                    '<div class="block-menu-wrapper"><button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button></div>' +
+                    '<div class="media video-block" contenteditable="false">' +
+                        '<div class="media-toolbar">' +
+                            '<button class="btn btn-sm media-upload">Upload</button>' +
+                            '<button class="btn btn-sm media-url">Embed link</button>' +
+                        '</div>' +
+                        '<div class="media-preview media-empty">Click Upload or Embed link</div>' +
+                        '<input class="media-caption" placeholder="Add caption..." />' +
+                    '</div>' +
+                '</div>';
+                break;
+            case 'file':
+                html = '<div class="sprintspace-block" data-block-type="file">' +
+                    '<div class="block-menu-wrapper"><button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button></div>' +
+                    '<div class="media file-block" contenteditable="false">' +
+                        '<div class="media-toolbar">' +
+                            '<button class="btn btn-sm media-upload">Upload</button>' +
+                            '<button class="btn btn-sm media-url">From URL</button>' +
+                        '</div>' +
+                        '<div class="media-preview media-empty">No file yet</div>' +
+                    '</div>' +
+                '</div>';
+                break;
+            case 'bookmark':
+                html = '<div class="sprintspace-block" data-block-type="bookmark">' +
+                    '<div class="block-menu-wrapper"><button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button></div>' +
+                    '<div class="media bookmark-block" contenteditable="false">' +
+                        '<div class="media-toolbar">' +
+                            '<button class="btn btn-sm media-url">Add URL</button>' +
+                        '</div>' +
+                        '<div class="media-preview media-empty">Paste a link to create a preview</div>' +
+                    '</div>' +
+                '</div>';
+                break;
             case 'timeline':
                 html = '<div class="sprintspace-block" data-block-type="timeline">' +
                     '<div class="block-menu-wrapper">' +
@@ -1325,6 +1411,9 @@ class SprintSpaceWorkspaceApp {
                             selection.removeAllRanges();
                             selection.addRange(fallbackRange);
                         }
+
+                        // Initialize the just-inserted block features immediately
+                        try { this.initializeBlockFeatures(type); } catch(e) {}
                     }
                 }
                 // Close the 'else' block that handles non-empty editor insertion
@@ -1523,6 +1612,14 @@ class SprintSpaceWorkspaceApp {
             this.initializeToggleFeatures();
         } else if (blockType === 'timeline') {
             this.initializeTimelineFeatures();
+        } else if (blockType === 'image') {
+            this.initializeImageBlock();
+        } else if (blockType === 'file') {
+            this.initializeFileBlock();
+        } else if (blockType === 'bookmark') {
+            this.initializeBookmarkBlock();
+        } else if (blockType === 'video') {
+            this.initializeVideoBlock();
         }
     }
     
@@ -1875,6 +1972,774 @@ class SprintSpaceWorkspaceApp {
             this.hideModal();
             this.renderTimeline(block);
         };
+    }
+
+    // ==================== MEDIA BLOCKS ====================
+    async initializeImageBlock() {
+        const block = document.querySelector('.image-block:last-of-type');
+        if (!block) return;
+        const uploadBtn = block.querySelector('.media-upload');
+        const urlBtn = block.querySelector('.media-url');
+        const preview = block.querySelector('.media-preview');
+        const caption = block.querySelector('.media-caption');
+
+        uploadBtn.onclick = async () => {
+            const f = await this.promptForFile('image/*');
+            if (!f) return;
+            const info = await this.uploadFileToPage(f);
+            preview.classList.remove('media-empty');
+            preview.innerHTML = `<img src="${info.file_url}" alt="" style="max-width:100%; height:auto; border-radius:8px;"/>`;
+            block.dataset.media = JSON.stringify({type:'image', file: info});
+        };
+        urlBtn.onclick = async () => {
+            const url = prompt('Enter image URL');
+            if (!url) return;
+            preview.classList.remove('media-empty');
+            preview.innerHTML = `<img src="${url}" alt="" style="max-width:100%; height:auto; border-radius:8px;"/>`;
+            block.dataset.media = JSON.stringify({type:'image', url});
+        };
+        caption.oninput = () => {
+            const data = this.safeParse(block.dataset.media) || {type:'image'};
+            data.caption = caption.value;
+            block.dataset.media = JSON.stringify(data);
+        };
+
+        // Override with Notion-like modal picker
+        uploadBtn.onclick = () => this.openMediaDialog('image', async (sel) => {
+            if (sel.mode === 'upload' && sel.file) {
+                // Instant local preview
+                const blobUrl = URL.createObjectURL(sel.file);
+                preview.classList.remove('media-empty');
+                preview.innerHTML = `<img src="${blobUrl}" alt="" style="max-width:100%; height:auto; border-radius:8px;"/>`;
+                try {
+                    const info = await this.uploadFileToPage(sel.file);
+                    const imgEl = preview.querySelector('img');
+                    if (imgEl) {
+                        console.log('File info received:', info);
+                        
+                        // Strategy 1: Try base64 data URL first (immediate display)
+                        if (info.base64_data) {
+                            console.log('Using base64 data URL for immediate display');
+                            imgEl.src = info.base64_data;
+                            imgEl.onload = () => {
+                                console.log('Base64 image loaded successfully');
+                                // After base64 loads, try to switch to server URL for caching
+                                setTimeout(() => {
+                                    const serverUrl = this.normalizeUrl(info.file_url);
+                                    console.log('Switching to server URL:', serverUrl);
+                                    const testImg = new Image();
+                                    testImg.onload = () => {
+                                        console.log('Server URL works, switching');
+                                        imgEl.src = serverUrl;
+                                    };
+                                    testImg.onerror = () => {
+                                        console.log('Server URL failed, keeping base64');
+                                    };
+                                    testImg.src = serverUrl;
+                                }, 1000);
+                            };
+                        } else {
+                            // Strategy 2: Use server URL directly
+                            const imageUrl = this.normalizeUrl(info.file_url);
+                            console.log('Setting image src to:', imageUrl);
+                            imgEl.src = imageUrl;
+                            
+                            imgEl.onerror = () => {
+                                console.error('Failed to load image:', imageUrl);
+                                frappe.show_alert({message:'Failed to load uploaded image. File may be inaccessible.', indicator:'red'});
+                            };
+                            imgEl.onload = () => {
+                                console.log('Image loaded successfully:', imageUrl);
+                            };
+                        }
+                    }
+                    block.dataset.media = JSON.stringify({type:'image', file: info});
+                    // Hide upload buttons after successful upload
+                    this.hideMediaToolbar(block);
+                    setTimeout(() => this.autoSavePage(), 200);
+                } catch (error) {
+                    console.error('Image upload error:', error);
+                    frappe.show_alert({message:'Upload failed: ' + (error.message || 'Unknown error'), indicator:'red'});
+                    // Revert to empty state on error
+                    preview.classList.add('media-empty');
+                    preview.innerHTML = 'Click Upload or From URL';
+                } finally {
+                    setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+                }
+            } else if (sel.mode === 'url' && sel.url) {
+                preview.classList.remove('media-empty');
+                preview.innerHTML = `<img src="${sel.url}" alt="" style="max-width:100%; height:auto; border-radius:8px;"/>`;
+                block.dataset.media = JSON.stringify({type:'image', url: sel.url});
+                // Hide upload buttons after successful URL addition
+                this.hideMediaToolbar(block);
+                setTimeout(() => this.autoSavePage(), 200);
+            }
+        });
+        urlBtn.onclick = uploadBtn.onclick;
+    }
+
+    async initializeFileBlock() {
+        const block = document.querySelector('.file-block:last-of-type');
+        if (!block) return;
+        const uploadBtn = block.querySelector('.media-upload');
+        const urlBtn = block.querySelector('.media-url');
+        const preview = block.querySelector('.media-preview');
+
+        const renderCard = (name, url) => {
+            preview.classList.remove('media-empty');
+            preview.innerHTML = `<div class="media-card"><span class="media-icon">📎</span><a href="${url}" target="_blank">${name}</a></div>`;
+        };
+
+        uploadBtn.onclick = async () => {
+            const f = await this.promptForFile('*/*');
+            if (!f) return;
+            const info = await this.uploadFileToPage(f);
+            renderCard(info.filename || f.name, info.file_url);
+            block.dataset.media = JSON.stringify({type:'file', file: info});
+        };
+        urlBtn.onclick = async () => {
+            const url = prompt('Enter file URL');
+            if (!url) return;
+            const name = url.split('/').pop() || 'file';
+            renderCard(name, url);
+            block.dataset.media = JSON.stringify({type:'file', url, name});
+        };
+
+        // Override with Notion-like modal picker
+        uploadBtn.onclick = () => this.openMediaDialog('file', async (sel) => {
+            if (sel.mode === 'upload' && sel.file) {
+                // Instant local card, will swap to server URL after upload
+                const localUrl = URL.createObjectURL(sel.file);
+                renderCard(sel.file.name || 'file', localUrl);
+                try {
+                    const info = await this.uploadFileToPage(sel.file);
+                    console.log('File info received:', info);
+                    
+                    // Strategy 1: Use base64 data for preview when possible
+                    if (info.base64_data) {
+                        console.log('Using base64 data for file preview');
+                        this.renderFilePreview(preview, sel.file, info);
+                    } else {
+                        // Strategy 2: Use server URL directly
+                        const fileUrl = this.normalizeUrl(info.file_url);
+                        console.log('Setting file URL to:', fileUrl);
+                        this.renderFilePreview(preview, sel.file, info, fileUrl);
+                    }
+                    
+                    block.dataset.media = JSON.stringify({type:'file', file: info});
+                    // Hide upload buttons after successful upload
+                    this.hideMediaToolbar(block);
+                    setTimeout(() => this.autoSavePage(), 200);
+                } catch (error) {
+                    console.error('File upload error:', error);
+                    frappe.show_alert({message:'Upload failed: ' + (error.message || 'Unknown error'), indicator:'red'});
+                    // Revert to empty state on error
+                    preview.classList.add('media-empty');
+                    preview.innerHTML = 'Click Upload or From URL';
+                } finally {
+                    setTimeout(() => URL.revokeObjectURL(localUrl), 2000);
+                }
+            } else if (sel.mode === 'url' && sel.url) {
+                const name = sel.url.split('/').pop() || 'file';
+                renderCard(name, sel.url);
+                block.dataset.media = JSON.stringify({type:'file', url: sel.url, name});
+                // Hide upload buttons after successful URL addition
+                this.hideMediaToolbar(block);
+                setTimeout(() => this.autoSavePage(), 200);
+            }
+        });
+        urlBtn.onclick = uploadBtn.onclick;
+    }
+
+    async initializeBookmarkBlock() {
+        const block = document.querySelector('.bookmark-block:last-of-type');
+        if (!block) return;
+        const urlBtn = block.querySelector('.media-url');
+        const preview = block.querySelector('.media-preview');
+
+        urlBtn.onclick = async () => {
+            const url = prompt('Paste a link');
+            if (!url) return;
+            try {
+                const r = await frappe.call({ method: 'sprintspace.sprintspace.api.media.link_preview', args: { url } });
+                const d = r.message || {};
+                preview.classList.remove('media-empty');
+                preview.innerHTML = `
+                    <a class="bookmark-card" href="${d.url}" target="_blank">
+                        ${d.image ? `<div class="bm-image" style="background-image:url('${d.image}')"></div>` : ''}
+                        <div class="bm-body">
+                            <div class="bm-title">${d.title||d.site_name||'Link'}</div>
+                            <div class="bm-desc">${d.description||''}</div>
+                            <div class="bm-meta">${d.site_name||''}</div>
+                        </div>
+                    </a>`;
+                block.dataset.media = JSON.stringify({type:'bookmark', data: d});
+                this.autoSavePage();
+            } catch (e) {
+                frappe.show_alert({message:'Failed to fetch preview', indicator:'red'});
+            }
+        };
+
+        // Override with Notion-like modal picker
+        urlBtn.onclick = () => this.openMediaDialog('bookmark', async (sel) => {
+            if (!sel.url) return;
+            try {
+                const r = await frappe.call({ method: 'sprintspace.sprintspace.api.media.link_preview', args: { url: sel.url } });
+                const d = r.message || {};
+                preview.classList.remove('media-empty');
+                preview.innerHTML = `
+                    <a class="bookmark-card" href="${d.url}" target="_blank">
+                        ${d.image ? `<div class="bm-image" style="background-image:url('${d.image}')"></div>` : ''}
+                        <div class="bm-body">
+                            <div class="bm-title">${d.title||d.site_name||'Link'}</div>
+                            <div class="bm-desc">${d.description||''}</div>
+                            <div class="bm-meta">${d.site_name||''}</div>
+                        </div>
+                    </a>`;
+                block.dataset.media = JSON.stringify({type:'bookmark', data: d});
+            } catch (e) {
+                frappe.show_alert({message:'Failed to fetch preview', indicator:'red'});
+            }
+        });
+    }
+
+    async initializeVideoBlock() {
+        const block = document.querySelector('.video-block:last-of-type');
+        if (!block) return;
+        const uploadBtn = block.querySelector('.media-upload');
+        const urlBtn = block.querySelector('.media-url');
+        const preview = block.querySelector('.media-preview');
+        const caption = block.querySelector('.media-caption');
+
+        const renderVideo = (src) => {
+            preview.classList.remove('media-empty');
+            preview.innerHTML = `<video class="ss-video" src="${src}" controls playsinline style="width:100%; max-height:520px; border-radius:10px; background:#000"></video>`;
+        };
+
+        uploadBtn.onclick = () => this.openMediaDialog('video', async (sel) => {
+            if (sel.mode === 'upload' && sel.file) {
+                // File size already checked in openMediaDialog
+                const localUrl = URL.createObjectURL(sel.file);
+                renderVideo(localUrl);
+                try {
+                    const info = await this.uploadFileToPage(sel.file);
+                    const v = block.querySelector('video.ss-video');
+                    if (v) {
+                        console.log('Video file info received:', info);
+                        
+                        // Strategy 1: Try base64 data URL first (immediate display)
+                        if (info.base64_data) {
+                            console.log('Using base64 data URL for immediate video display');
+                            v.src = info.base64_data;
+                            v.onloadedmetadata = () => {
+                                console.log('Base64 video loaded successfully');
+                                // After base64 loads, try to switch to server URL for caching
+                                setTimeout(() => {
+                                    const serverUrl = this.normalizeUrl(info.file_url);
+                                    console.log('Switching video to server URL:', serverUrl);
+                                    const testVideo = document.createElement('video');
+                                    testVideo.onloadedmetadata = () => {
+                                        console.log('Server URL works, switching video');
+                                        v.src = serverUrl;
+                                    };
+                                    testVideo.onerror = () => {
+                                        console.log('Server URL failed, keeping base64 video');
+                                    };
+                                    testVideo.src = serverUrl;
+                                }, 1000);
+                            };
+                        } else {
+                            // Strategy 2: Use server URL directly
+                            const videoUrl = this.normalizeUrl(info.file_url);
+                            console.log('Setting video src to:', videoUrl);
+                            v.src = videoUrl;
+                            
+                            v.onerror = () => {
+                                console.error('Failed to load video:', videoUrl);
+                                frappe.show_alert({message:'Failed to load uploaded video. File may be inaccessible.', indicator:'red'});
+                            };
+                            v.onloadedmetadata = () => {
+                                console.log('Video loaded successfully:', videoUrl);
+                            };
+                        }
+                    }
+                    block.dataset.media = JSON.stringify({type:'video', file: info});
+                    // Hide upload buttons after successful upload
+                    this.hideMediaToolbar(block);
+                    setTimeout(() => this.autoSavePage(), 200);
+                } catch (error) {
+                    console.error('Video upload error:', error);
+                    frappe.show_alert({message:'Upload failed: ' + (error.message || 'Unknown error'), indicator:'red'});
+                    // Revert to empty state on error
+                    preview.classList.add('media-empty');
+                    preview.innerHTML = 'Click Upload or Embed link';
+                } finally {
+                    setTimeout(() => URL.revokeObjectURL(localUrl), 2000);
+                }
+            } else if (sel.mode === 'url' && sel.url) {
+                // Support YouTube/Vimeo oEmbed via native video if direct URL, else iframe
+                if (/\.(mp4|webm|ogg)(\?|$)/i.test(sel.url)) {
+                    renderVideo(sel.url);
+                } else {
+                    preview.classList.remove('media-empty');
+                    preview.innerHTML = `<div class="video-embed"><iframe src="${sel.url}" frameborder="0" allowfullscreen style="width:100%; aspect-ratio:16/9; border-radius:10px; background:#000"></iframe></div>`;
+                }
+                block.dataset.media = JSON.stringify({type:'video', url: sel.url});
+                // Hide upload buttons after successful URL addition
+                this.hideMediaToolbar(block);
+                setTimeout(() => this.autoSavePage(), 200);
+            }
+        });
+        urlBtn.onclick = uploadBtn.onclick;
+
+        if (caption) {
+            caption.oninput = () => {
+                const data = this.safeParse(block.dataset.media) || {type:'video'};
+                data.caption = caption.value;
+                block.dataset.media = JSON.stringify(data);
+            };
+        }
+    }
+
+    async promptForFile(accept) {
+        return new Promise(resolve => {
+            const inp = document.createElement('input');
+            inp.type = 'file';
+            if (accept) inp.accept = accept;
+            inp.onchange = () => resolve(inp.files && inp.files[0]);
+            inp.click();
+        });
+    }
+
+    async uploadFileToPage(file) {
+        // Strategy: Prefer frappe.client.attach_file (base64) for dev reliability, fall back to upload_file
+        try {
+            const dataUrl = await this.readFileAsDataURL(file);
+            const base64 = dataUrl.split(',')[1] || dataUrl;
+            const safeName = this.buildSafeFilename(file.name);
+            const resp = await frappe.call({
+                method: 'frappe.client.attach_file',
+                args: {
+                    doctype: 'SprintSpace Page',
+                    docname: this.currentPage,
+                    filename: safeName,
+                    is_private: 0,
+                    filedata: base64
+                }
+            });
+            const msg = (resp && resp.message) || {};
+            if (!msg || !msg.file_url) throw new Error('attach_file returned no file_url');
+            return { 
+                file_doc: msg.name, 
+                file_url: msg.file_url, 
+                filename: msg.file_name || safeName, 
+                mime_type: msg.mimetype || file.type, 
+                file_size: msg.file_size,
+                base64_data: dataUrl // Include base64 for immediate display
+            };
+        } catch (e1) {
+            // Fallback to upload_file with CSRF headers
+            const fd = new FormData();
+            fd.append('file', file);
+            fd.append('doctype', 'SprintSpace Page');
+            fd.append('docname', this.currentPage);
+            fd.append('is_private', '1');
+            const headers = { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
+            const csrf = this.getCsrfToken();
+            if (csrf) headers['X-Frappe-CSRF-Token'] = csrf;
+            const r = await fetch('/api/method/upload_file', { method: 'POST', body: fd, headers, credentials: 'same-origin' });
+            if (!r.ok) throw new Error('upload_file failed: ' + r.status);
+            const data = await r.json();
+            const msg = data && data.message;
+            if (!msg || !msg.file_url) throw new Error('upload_file returned no file_url');
+            return { file_doc: msg.name, file_url: msg.file_url, filename: msg.file_name, mime_type: msg.mimetype, file_size: msg.file_size };
+        }
+    }
+
+    readFileAsDataURL(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+
+    buildSafeFilename(originalName) {
+        try {
+            const dot = originalName.lastIndexOf('.');
+            const ext = dot > -1 ? originalName.slice(dot + 1).toLowerCase().slice(0, 8) : '';
+            const rawBase = dot > -1 ? originalName.slice(0, dot) : originalName;
+            const base = (rawBase || 'file')
+                .toLowerCase()
+                .replace(/[^a-z0-9-_]+/g, '-')
+                .replace(/^-+|-+$/g, '')
+                .slice(0, 80);
+            const suffix = Date.now().toString(36).slice(-6);
+            const finalBase = base || 'file';
+            return `${finalBase}-${suffix}${ext ? '.' + ext : ''}`;
+        } catch (e) {
+            return `file-${Date.now().toString(36)}.bin`;
+        }
+    }
+
+    getCookieValue(name) {
+        const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()\[\]\\\/\+^])/g, '\\$1') + '=([^;]*)'));
+        return m ? decodeURIComponent(m[1]) : '';
+    }
+
+    getCsrfToken() {
+        return (window.frappe && frappe.csrf_token) || window.csrf_token || this.getCookieValue('csrf_token');
+    }
+
+    normalizeUrl(url) {
+        if (!url) return url;
+        
+        // Make relative URLs absolute
+        if (url.startsWith('/')) {
+            const base = (window.frappe && frappe.urllib && frappe.urllib.get_base_url && frappe.urllib.get_base_url()) || window.location.origin;
+            return base.replace(/\/$/, '') + url;
+        }
+        return url;
+    }
+
+    renderFilePreview(container, file, info, fallbackUrl = null) {
+        container.classList.remove('media-empty');
+        
+        const fileType = file.type || info.mime_type || '';
+        const fileName = info.filename || file.name || 'file';
+        const fileSize = this.formatFileSize(info.file_size || file.size || 0);
+        const fileUrl = fallbackUrl || info.base64_data || this.normalizeUrl(info.file_url);
+        
+        console.log('Rendering preview for file type:', fileType, 'name:', fileName);
+        
+        // Determine preview type based on file type
+        if (fileType.startsWith('image/')) {
+            // Image preview
+            container.innerHTML = `
+                <div class="file-preview-card">
+                    <div class="file-preview-image">
+                        <img src="${fileUrl}" alt="${fileName}" style="max-width:100%; max-height:200px; border-radius:8px;">
+                    </div>
+                    <div class="file-info">
+                        <div class="file-name">${fileName}</div>
+                        <div class="file-meta">${fileSize} • Image</div>
+                        <a href="${fileUrl}" target="_blank" class="file-download">Download</a>
+                    </div>
+                </div>
+            `;
+        } else if (fileType === 'application/pdf') {
+            // PDF preview with embed
+            container.innerHTML = `
+                <div class="file-preview-card">
+                    <div class="file-preview-pdf">
+                        <embed src="${fileUrl}" type="application/pdf" width="100%" height="300px" style="border-radius:8px;">
+                        <div class="pdf-fallback" style="display:none; padding:20px; text-align:center; background:#f5f5f5; border-radius:8px;">
+                            <i class="fa fa-file-pdf" style="font-size:48px; color:#e74c3c;"></i>
+                            <p>PDF preview not available</p>
+                        </div>
+                    </div>
+                    <div class="file-info">
+                        <div class="file-name">${fileName}</div>
+                        <div class="file-meta">${fileSize} • PDF Document</div>
+                        <a href="${fileUrl}" target="_blank" class="file-download">Open PDF</a>
+                    </div>
+                </div>
+            `;
+            
+            // Handle PDF embed fallback
+            const embed = container.querySelector('embed');
+            const fallback = container.querySelector('.pdf-fallback');
+            if (embed && fallback) {
+                embed.onerror = () => {
+                    embed.style.display = 'none';
+                    fallback.style.display = 'block';
+                };
+            }
+        } else if (fileType.startsWith('text/') || fileType === 'application/json' || fileName.match(/\.(txt|md|json|js|css|html|xml|csv)$/i)) {
+            // Text file preview
+            const icon = this.getFileIcon(fileType, fileName);
+            container.innerHTML = `
+                <div class="file-preview-card">
+                    <div class="file-preview-text">
+                        <div class="text-preview-loading">Loading preview...</div>
+                    </div>
+                    <div class="file-info">
+                        <div class="file-name">${fileName}</div>
+                        <div class="file-meta">${fileSize} • ${icon} Text Document</div>
+                        <a href="${fileUrl}" target="_blank" class="file-download">Download</a>
+                    </div>
+                </div>
+            `;
+            
+            // Load text content for preview
+            this.loadTextPreview(container, fileUrl, fileType);
+        } else if (fileType.startsWith('video/')) {
+            // Video preview
+            container.innerHTML = `
+                <div class="file-preview-card">
+                    <div class="file-preview-video">
+                        <video src="${fileUrl}" controls style="width:100%; max-height:300px; border-radius:8px;"></video>
+                    </div>
+                    <div class="file-info">
+                        <div class="file-name">${fileName}</div>
+                        <div class="file-meta">${fileSize} • Video</div>
+                        <a href="${fileUrl}" target="_blank" class="file-download">Download</a>
+                    </div>
+                </div>
+            `;
+        } else if (fileType.startsWith('audio/')) {
+            // Audio preview
+            container.innerHTML = `
+                <div class="file-preview-card">
+                    <div class="file-preview-audio">
+                        <audio src="${fileUrl}" controls style="width:100%;">
+                            Your browser does not support the audio element.
+                        </audio>
+                    </div>
+                    <div class="file-info">
+                        <div class="file-name">${fileName}</div>
+                        <div class="file-meta">${fileSize} • Audio</div>
+                        <a href="${fileUrl}" target="_blank" class="file-download">Download</a>
+                    </div>
+                </div>
+            `;
+        } else {
+            // Generic file preview with icon
+            const icon = this.getFileIcon(fileType, fileName);
+            container.innerHTML = `
+                <div class="file-preview-card">
+                    <div class="file-preview-generic">
+                        <div class="file-icon-large">${icon}</div>
+                    </div>
+                    <div class="file-info">
+                        <div class="file-name">${fileName}</div>
+                        <div class="file-meta">${fileSize} • ${this.getFileTypeDescription(fileType, fileName)}</div>
+                        <a href="${fileUrl}" target="_blank" class="file-download">Download</a>
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    async loadTextPreview(container, fileUrl, fileType) {
+        try {
+            const response = await fetch(fileUrl);
+            const text = await response.text();
+            const preview = container.querySelector('.file-preview-text');
+            
+            if (preview) {
+                const truncatedText = text.length > 500 ? text.substring(0, 500) + '...' : text;
+                preview.innerHTML = `
+                    <pre style="margin:0; padding:15px; background:#f8f9fa; border-radius:8px; font-size:12px; line-height:1.4; overflow:auto; max-height:200px;">${this.escapeHtml(truncatedText)}</pre>
+                `;
+            }
+        } catch (error) {
+            console.error('Failed to load text preview:', error);
+            const preview = container.querySelector('.file-preview-text');
+            if (preview) {
+                preview.innerHTML = `<div style="padding:20px; text-align:center; color:#666;">Preview not available</div>`;
+            }
+        }
+    }
+
+    getFileIcon(fileType, fileName) {
+        if (fileType.startsWith('image/')) return '🖼️';
+        if (fileType.startsWith('video/')) return '🎥';
+        if (fileType.startsWith('audio/')) return '🎵';
+        if (fileType === 'application/pdf') return '📄';
+        if (fileType.includes('word') || fileName.match(/\.docx?$/i)) return '📝';
+        if (fileType.includes('excel') || fileName.match(/\.xlsx?$/i)) return '📊';
+        if (fileType.includes('powerpoint') || fileName.match(/\.pptx?$/i)) return '📽️';
+        if (fileType.includes('zip') || fileName.match(/\.(zip|rar|7z)$/i)) return '🗜️';
+        if (fileType.startsWith('text/') || fileName.match(/\.(txt|md|json|js|css|html)$/i)) return '📝';
+        return '📁';
+    }
+
+    getFileTypeDescription(fileType, fileName) {
+        if (fileType.startsWith('image/')) return 'Image';
+        if (fileType.startsWith('video/')) return 'Video';
+        if (fileType.startsWith('audio/')) return 'Audio';
+        if (fileType === 'application/pdf') return 'PDF Document';
+        if (fileType.includes('word') || fileName.match(/\.docx?$/i)) return 'Word Document';
+        if (fileType.includes('excel') || fileName.match(/\.xlsx?$/i)) return 'Excel Spreadsheet';
+        if (fileType.includes('powerpoint') || fileName.match(/\.pptx?$/i)) return 'PowerPoint Presentation';
+        if (fileType.includes('zip') || fileName.match(/\.(zip|rar|7z)$/i)) return 'Archive';
+        if (fileType.startsWith('text/') || fileName.match(/\.(txt|md|json|js|css|html)$/i)) return 'Text File';
+        return 'Document';
+    }
+
+    formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    fixPrivateFileUrls(container) {
+        // Fix relative URLs to absolute URLs
+        const images = container.querySelectorAll('img[src^="/"]');
+        images.forEach(img => {
+            const originalSrc = img.src;
+            if (!originalSrc.startsWith('http')) {
+                console.log('Fixing relative image URL:', originalSrc);
+                img.src = this.normalizeUrl(originalSrc);
+            }
+        });
+        
+        // Fix relative video URLs
+        const videos = container.querySelectorAll('video[src^="/"]');
+        videos.forEach(video => {
+            const originalSrc = video.src;
+            if (!originalSrc.startsWith('http')) {
+                console.log('Fixing relative video URL:', originalSrc);
+                video.src = this.normalizeUrl(originalSrc);
+            }
+        });
+        
+        // Restore media block previews that may have lost base64 data during save
+        this.restoreMediaBlockPreviews(container);
+    }
+
+    restoreMediaBlockPreviews(container) {
+        const mediaBlocks = container.querySelectorAll('[data-media]');
+        
+        mediaBlocks.forEach(block => {
+            try {
+                const mediaData = JSON.parse(block.dataset.media);
+                
+                if (mediaData.file && mediaData.file.file_url && !mediaData.file.base64_data) {
+                    console.log('Restoring preview for media block:', mediaData.file.filename);
+                    
+                    const preview = block.querySelector('.media-preview');
+                    if (preview && preview.classList.contains('media-empty')) {
+                        // Determine media type and recreate preview
+                        if (mediaData.type === 'image') {
+                            this.restoreImagePreview(preview, mediaData.file);
+                        } else if (mediaData.type === 'video') {
+                            this.restoreVideoPreview(preview, mediaData.file);
+                        } else if (mediaData.type === 'file') {
+                            this.restoreFilePreview(preview, mediaData.file);
+                        }
+                    }
+                }
+                
+                // Hide toolbar for any block that has media content (regardless of restoration)
+                if (mediaData.file || mediaData.url) {
+                    this.hideMediaToolbar(block);
+                }
+            } catch (error) {
+                console.warn('Failed to restore media preview:', error);
+            }
+        });
+    }
+
+    restoreImagePreview(container, fileInfo) {
+        const imageUrl = this.normalizeUrl(fileInfo.file_url);
+        container.classList.remove('media-empty');
+        container.innerHTML = `<img src="${imageUrl}" alt="${fileInfo.filename || 'Image'}" style="max-width:100%; max-height:300px; border-radius:8px;">`;
+    }
+
+    restoreVideoPreview(container, fileInfo) {
+        const videoUrl = this.normalizeUrl(fileInfo.file_url);
+        container.classList.remove('media-empty');
+        container.innerHTML = `<video src="${videoUrl}" controls style="width:100%; max-height:300px; border-radius:8px;"></video>`;
+    }
+
+    restoreFilePreview(container, fileInfo) {
+        // Create a mock file object for renderFilePreview
+        const mockFile = {
+            type: fileInfo.mime_type || 'application/octet-stream',
+            name: fileInfo.filename || 'file',
+            size: fileInfo.file_size || 0
+        };
+        
+        this.renderFilePreview(container, mockFile, fileInfo, this.normalizeUrl(fileInfo.file_url));
+    }
+
+    hideMediaToolbar(block) {
+        const toolbar = block.querySelector('.media-toolbar');
+        if (toolbar) {
+            toolbar.style.display = 'none';
+        }
+    }
+
+    showMediaToolbar(block) {
+        const toolbar = block.querySelector('.media-toolbar');
+        if (toolbar) {
+            toolbar.style.display = 'flex';
+        }
+    }
+
+    openMediaDialog(kind, onDone) {
+        const titles = {
+            image: 'Add an image',
+            video: 'Upload or embed a video',
+            file: 'Upload or embed a file',
+            bookmark: 'Add a web bookmark'
+        };
+        const title = titles[kind] || 'Upload or embed a file';
+        const html = `
+            <div class="media-popover">
+                <div class="mp-tabs">
+                    <button class="mp-tab active" data-tab="upload">Upload</button>
+                    <button class="mp-tab" data-tab="url">Embed link</button>
+                </div>
+                <div class="mp-pane" data-pane="upload">
+                    <button class="mp-choose-file">Choose a file</button>
+                </div>
+                <div class="mp-pane hidden" data-pane="url">
+                    <input type="text" class="mp-url" placeholder="Paste in https://..."/>
+                    <button class="mp-create">Create</button>
+                </div>
+            </div>`;
+        this.showModalHTML(title, html);
+        const modalContent = document.getElementById('modal-content');
+        const switchTab = (name) => {
+            modalContent.querySelectorAll('.mp-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+            modalContent.querySelectorAll('.mp-pane').forEach(p => p.classList.toggle('hidden', p.dataset.pane !== name));
+        };
+        modalContent.querySelectorAll('.mp-tab').forEach(b => b.onclick = () => switchTab(b.dataset.tab));
+        const choose = modalContent.querySelector('.mp-choose-file');
+        if (choose) choose.onclick = async () => {
+            let accept = '*/*';
+            if (kind === 'image') {
+                accept = 'image/*';
+            } else if (kind === 'video') {
+                accept = 'video/mp4,video/webm,video/ogg';
+            } else if (kind === 'file') {
+                accept = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt,.csv';
+            }
+            const f = await this.promptForFile(accept);
+            if (!f) return;
+            
+            // Check file size for videos before proceeding
+            if (kind === 'video' && f.size > 50 * 1024 * 1024) {
+                frappe.show_alert({message:'Video file too large. Please use a file smaller than 50MB.', indicator:'red'});
+                return;
+            }
+            
+            this.hideModal();
+            onDone && onDone({mode:'upload', file:f});
+        };
+        const create = modalContent.querySelector('.mp-create');
+        if (create) create.onclick = () => {
+            const url = (modalContent.querySelector('.mp-url') || { value: '' }).value.trim();
+            if (!url) return;
+            this.hideModal();
+            onDone && onDone({mode:'url', url});
+        };
+    }
+
+    safeParse(s) {
+        try { return JSON.parse(s || '{}'); } catch(e) { return {}; }
     }
     
     showFilterMenu() {
@@ -2944,20 +3809,43 @@ class SprintSpaceWorkspaceApp {
     getEditorContent() {
         if (!this.editor) return { blocks: [] };
         
-        const html = this.editor.innerHTML;
+        // Clone the editor to manipulate without affecting the display
+        const clonedEditor = this.editor.cloneNode(true);
         
+        // Remove base64 data from media blocks to reduce size for saving
+        this.stripBase64DataFromMediaBlocks(clonedEditor);
+        
+        const html = clonedEditor.innerHTML || '';
         return {
             time: Date.now(),
             blocks: [
                 {
-                    type: 'paragraph',
-                    data: {
-                        text: html || ''
-                    }
+                    type: 'raw',
+                    data: { html }
                 }
             ],
             version: '2.30.7'
         };
+    }
+
+    stripBase64DataFromMediaBlocks(container) {
+        // Find all media blocks with data-media attribute
+        const mediaBlocks = container.querySelectorAll('[data-media]');
+        
+        mediaBlocks.forEach(block => {
+            try {
+                const mediaData = JSON.parse(block.dataset.media);
+                
+                // Remove base64_data but keep file info for restoration
+                if (mediaData.file && mediaData.file.base64_data) {
+                    console.log('Removing base64 data from media block for save:', mediaData.file.filename);
+                    delete mediaData.file.base64_data;
+                    block.dataset.media = JSON.stringify(mediaData);
+                }
+            } catch (error) {
+                console.warn('Failed to parse media data:', error);
+            }
+        });
     }
 
     // ==================== UI STATES ====================
