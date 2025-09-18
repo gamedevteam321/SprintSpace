@@ -19,7 +19,10 @@
   "description",
   "column_break_3",
   "owner_user",
-  "is_public",
+  "visibility",
+  "company",
+  "section_break_collab",
+  "collaborators",
   "section_break_6",
   "created_date",
   "modified_date"
@@ -50,10 +53,29 @@
    "default": "user"
   },
   {
-   "fieldname": "is_public",
-   "fieldtype": "Check",
-   "label": "Is Public",
-   "default": 0
+   "fieldname": "visibility",
+   "fieldtype": "Select",
+   "label": "Visibility",
+   "options": "Private\nCompany\nSpecific Users",
+   "default": "Private",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company"
+  },
+  {
+   "fieldname": "section_break_collab",
+   "fieldtype": "Section Break",
+   "label": "Collaborators"
+  },
+  {
+   "fieldname": "collaborators",
+   "fieldtype": "Table",
+   "label": "Collaborators",
+   "options": "SprintSpace Workspace Collaborator"
   },
   {
    "fieldname": "section_break_6",

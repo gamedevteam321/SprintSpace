@@ -116,7 +116,8 @@ class SprintSpaceWorkspaceApp {
                 onclick="window.sprintSpaceApp.selectWorkspace('${workspace.name}')">
                 <span class="workspace-item-icon" style="margin-right: 8px; font-size: 16px;">📁</span>
                 <span class="workspace-item-title">${workspace.title}</span>
-                <div class="item-actions" style="margin-left: auto; opacity: 0; transition: opacity 0.15s;">
+                <div class="item-actions" style="margin-left: auto; opacity: 0; transition: opacity 0.15s; display:flex; gap:4px;">
+                    ${workspace.owner_user === (frappe.session?.user || '') ? `<button class="item-action-btn" onclick="event.stopPropagation(); window.SprintSpaceUI.showWorkspaceSettings('${workspace.name}')" title="Settings" style="background: none; border: none; color: #6b7280; cursor: pointer; padding: 4px; border-radius: 4px; font-size: 12px;">⚙️</button>` : ''}
                     <button class="item-action-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.deleteWorkspace('${workspace.name}')" title="Delete" style="background: none; border: none; color: #6b7280; cursor: pointer; padding: 4px; margin-left: 4px; border-radius: 4px; font-size: 12px;">
                         🗑️
                     </button>
@@ -163,9 +164,19 @@ class SprintSpaceWorkspaceApp {
 
     async createWorkspace(title, description = '') {
         try {
+            // Collect optional settings if the modal has visibility controls
+            const visEl = document.getElementById('vs-visibility');
+            const companyEl = document.getElementById('vs-company');
+            const collabRows = document.getElementById('vs-collab-rows');
+            const visibility = visEl ? visEl.value : 'Private';
+            const company = companyEl ? companyEl.value : null;
+            const collaborators = collabRows ? Array.from(collabRows.querySelectorAll('tr')).map(tr=>({
+                user: tr.querySelector('.collab-user')?.value || '',
+                access: tr.querySelector('.collab-access')?.value || 'Viewer'
+            })).filter(c=>c.user) : [];
             const response = await frappe.call({
                 method: 'sprintspace.sprintspace.doctype.sprintspace_workspace.sprintspace_workspace.create_workspace',
-                args: { title, description }
+                args: { title, description, visibility, company, collaborators: JSON.stringify(collaborators) }
             });
             
             await this.loadWorkspaces();
@@ -286,8 +297,11 @@ class SprintSpaceWorkspaceApp {
                 style="display: flex; align-items: center; padding: 8px 12px; margin: 2px 0; border-radius: 6px; cursor: pointer; transition: background-color 0.15s; font-size: 14px; color: #374151; ${page.name === this.currentPage ? 'background: rgba(79, 70, 229, 0.12); color: #4f46e5; font-weight: 500;' : ''}"
                 onclick="window.sprintSpaceApp.selectPage('${page.name}')">
                 <span class="page-item-icon" style="margin-right: 8px; font-size: 16px;">📄</span>
-                <span class="page-item-title">${page.title}</span>
-                <div class="item-actions" style="margin-left: auto; opacity: 0; transition: opacity 0.15s;">
+                <span class="page-item-title">${page.title}
+                    ${page.visibility ? `<span style="margin-left:8px; font-size:11px; color:#6b7280; background:#f3f4f6; border:1px solid #e5e7eb; padding:2px 6px; border-radius:10px;">${page.visibility}</span>` : ''}
+                </span>
+                <div class="item-actions" style="margin-left: auto; opacity: 0; transition: opacity 0.15s; display:flex; gap:4px;">
+                    <button class="item-action-btn" onclick="event.stopPropagation(); window.SprintSpaceUI.showPageSettings('${page.name}')" title="Settings" style="background: none; border: none; color: #6b7280; cursor: pointer; padding: 4px; border-radius: 4px; font-size: 12px;">⚙️</button>
                     <button class="item-action-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.renamePage('${page.name}')" title="Rename" style="background: none; border: none; color: #6b7280; cursor: pointer; padding: 4px; margin-left: 4px; border-radius: 4px; font-size: 12px;">
                         ✏️
                     </button>
@@ -332,6 +346,11 @@ class SprintSpaceWorkspaceApp {
             
             const pageData = response.message;
             this.renderPageContent(pageData);
+            // Dispatch event so header logic can show/hide settings
+            try {
+                const evt = new CustomEvent('sprintspace:page-loaded', { detail: pageData });
+                document.dispatchEvent(evt);
+            } catch (e) {}
             this.renderPageList(); // Re-render to update active state
         } catch (error) {
             console.error('Error loading page:', error);
@@ -347,11 +366,24 @@ class SprintSpaceWorkspaceApp {
         
         try {
             console.log('Creating page with title:', title);
+            // Collect optional settings from modal if present
+            const visEl = document.getElementById('vs-visibility');
+            const companyEl = document.getElementById('vs-company');
+            const collabRows = document.getElementById('vs-collab-rows');
+            const visibility = visEl ? visEl.value : 'Use Workspace';
+            const company = companyEl ? companyEl.value : null;
+            const collaborators = collabRows ? Array.from(collabRows.querySelectorAll('tr')).map(tr=>({
+                user: tr.querySelector('.collab-user')?.value || '',
+                access: tr.querySelector('.collab-access')?.value || 'Viewer'
+            })).filter(c=>c.user) : [];
             const response = await frappe.call({
                 method: 'sprintspace.sprintspace.doctype.sprintspace_page.sprintspace_page.create_page',
                 args: { 
                     workspace: this.currentWorkspace, 
-                    title: title 
+                    title: title,
+                    visibility: visibility,
+                    company: company,
+                    collaborators: JSON.stringify(collaborators)
                 }
             });
             
@@ -616,7 +648,10 @@ class SprintSpaceWorkspaceApp {
         }
         
         if (commandMenu) {
-            commandMenu.style.display = 'none';
+            // Remove existing event listeners by cloning the element to avoid duplicate handlers
+            const newMenu = commandMenu.cloneNode(true);
+            commandMenu.parentNode.replaceChild(newMenu, commandMenu);
+            newMenu.style.display = 'none';
         }
         
         // Clear any stored editor state
@@ -755,6 +790,14 @@ class SprintSpaceWorkspaceApp {
                 keywords: ['divider', 'separator', 'hr', 'line'],
                 action: () => this.insertBlock(editor, 'divider', '')
             }
+            ,
+            {
+                title: 'Timeline',
+                subtitle: 'Visual task timeline with dates and assignees.',
+                icon: '📆',
+                keywords: ['timeline', 'gantt', 'calendar', 'plan', 'schedule'],
+                action: () => this.insertBlock(editor, 'timeline', '')
+            }
         ];
 
         this.setupSlashCommands(editor, commandMenu, commands);
@@ -762,13 +805,14 @@ class SprintSpaceWorkspaceApp {
     }
 
     setupSlashCommands(editor, commandMenu, commands) {
-        editor.addEventListener('input', (e) => {
+        // Use property-based handlers to avoid stacking duplicate listeners across re-inits
+        editor.oninput = (e) => {
             setTimeout(() => {
                 this.checkForSlashCommand(editor, commandMenu, commands);
             }, 10);
-        });
+        };
 
-        editor.addEventListener('keydown', (e) => {
+        editor.onkeydown = (e) => {
             if (this.workspaceEditorState.isShowingCommands) {
                 if (e.key === 'Escape') {
                     this.hideCommandMenu(commandMenu);
@@ -779,8 +823,9 @@ class SprintSpaceWorkspaceApp {
                     e.preventDefault();
                 } else if (e.key === 'Enter') {
                     e.preventDefault();
-                    if (this.workspaceEditorState.currentCommands[this.workspaceEditorState.selectedCommandIndex]) {
-                        this.workspaceEditorState.currentCommands[this.workspaceEditorState.selectedCommandIndex].action();
+                    const cmd = this.workspaceEditorState.currentCommands[this.workspaceEditorState.selectedCommandIndex];
+                    if (cmd && typeof cmd.action === 'function') {
+                        cmd.action();
                         this.hideCommandMenu(commandMenu);
                         this.workspaceEditorState.isShowingCommands = false;
                     }
@@ -790,37 +835,44 @@ class SprintSpaceWorkspaceApp {
                     }, 10);
                 }
             }
-        });
+        };
 
-        commandMenu.addEventListener('click', (e) => {
+        // Ensure only one click handler is attached to the command menu
+        commandMenu.onclick = (e) => {
             const commandItem = e.target.closest('.command-item');
             if (commandItem) {
                 const index = parseInt(commandItem.dataset.index);
-                if (this.workspaceEditorState.currentCommands[index]) {
-                    this.workspaceEditorState.currentCommands[index].action();
+                const cmd = this.workspaceEditorState.currentCommands[index];
+                if (cmd && typeof cmd.action === 'function') {
+                    cmd.action();
                     this.hideCommandMenu(commandMenu);
                     this.workspaceEditorState.isShowingCommands = false;
                 }
             }
-        });
+        };
 
-        editor.addEventListener('blur', () => {
+        editor.onblur = () => {
             setTimeout(() => {
                 if (this.workspaceEditorState.isShowingCommands && !commandMenu.contains(document.activeElement)) {
                     this.hideCommandMenu(commandMenu);
                     this.workspaceEditorState.isShowingCommands = false;
                 }
             }, 200);
-        });
+        };
 
-        document.addEventListener('click', (e) => {
+        // Manage document-level click handler to avoid accumulating listeners
+        if (this._docClickHandler) {
+            document.removeEventListener('click', this._docClickHandler);
+        }
+        this._docClickHandler = (e) => {
             if (this.workspaceEditorState.isShowingCommands &&
                 !editor.contains(e.target) &&
                 !commandMenu.contains(e.target)) {
                 this.hideCommandMenu(commandMenu);
                 this.workspaceEditorState.isShowingCommands = false;
             }
-        });
+        };
+        document.addEventListener('click', this._docClickHandler);
     }
 
     checkForSlashCommand(editor, commandMenu, commands) {
@@ -979,6 +1031,13 @@ class SprintSpaceWorkspaceApp {
         console.log('insertBlock called:', {type, content, level});
         console.log('Editor element:', editor);
         
+        // Re-entrancy guard: prevent duplicate inserts from stacked handlers
+        if (this._isInsertingBlock) {
+            console.warn('Duplicate insert prevented');
+            return;
+        }
+        this._isInsertingBlock = true;
+        
         // Ensure we're working with the right editor
         if (!editor || editor.id !== 'sprintspace-editor') {
             console.error('Invalid editor element');
@@ -1067,16 +1126,20 @@ class SprintSpaceWorkspaceApp {
         let html = '';
         switch (type) {
             case 'paragraph':
-                html = '<div class="sprintspace-block" data-block-type="paragraph"><div class="block-menu-wrapper"><button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button></div><p contenteditable="true">Type your content here...</p></div>';
+                // Empty paragraph; placeholder shown via CSS
+                html = '<div class="sprintspace-block" data-block-type="paragraph"><div class="block-menu-wrapper"><button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button></div><p contenteditable="true"></p></div>';
                 break;
             case 'heading':
-                html = `<div class="sprintspace-block" data-block-type="heading" data-level="${level}"><div class="block-menu-wrapper"><button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button></div><h${level} contenteditable="true">Your heading here</h${level}></div>`;
+                // Empty heading; placeholder shown via CSS per level
+                html = `<div class="sprintspace-block" data-block-type="heading" data-level="${level}"><div class="block-menu-wrapper"><button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button></div><h${level} contenteditable="true"></h${level}></div>`;
                 break;
             case 'list':
-                html = '<div class="sprintspace-block" data-block-type="list"><div class="block-menu-wrapper"><button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button></div><ul><li contenteditable="true">List item</li></ul></div>';
+                // Empty list item; placeholder shown via CSS
+                html = '<div class="sprintspace-block" data-block-type="list"><div class="block-menu-wrapper"><button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button></div><ul><li contenteditable="true"></li></ul></div>';
                 break;
             case 'numbered':
-                html = '<div class="sprintspace-block" data-block-type="numbered"><div class="block-menu-wrapper"><button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button></div><ol><li contenteditable="true">Numbered item</li></ol></div>';
+                // Empty numbered list item; placeholder shown via CSS
+                html = '<div class="sprintspace-block" data-block-type="numbered"><div class="block-menu-wrapper"><button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button></div><ol><li contenteditable="true"></li></ol></div>';
                 break;
             case 'checklist':
                 html = '<div class="sprintspace-block" data-block-type="checklist">' +
@@ -1161,6 +1224,37 @@ class SprintSpaceWorkspaceApp {
             case 'divider':
                 html = '<div class="sprintspace-block" data-block-type="divider"><div class="block-menu-wrapper"><button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button></div><hr></div>';
                 break;
+            case 'timeline':
+                html = '<div class="sprintspace-block" data-block-type="timeline">' +
+                    '<div class="block-menu-wrapper">' +
+                        '<button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button>' +
+                    '</div>' +
+                    '<div class="timeline-block" contenteditable="false" data-range-days="14">' +
+                        '<div class="timeline-toolbar">' +
+                            '<div class="tl-toolbar-left">' +
+                                '<button class="btn btn-sm add-timeline-task">+ Add task</button>' +
+                            '</div>' +
+                            '<div class="tl-toolbar-right">' +
+                                '<select class="timeline-range">' +
+                                    '<option value="7">7 days</option>' +
+                                    '<option value="14" selected>14 days</option>' +
+                                    '<option value="30">30 days</option>' +
+                                '</select>' +
+                            '</div>' +
+                        '</div>' +
+                        '<div class="timeline-wrap">' +
+                            '<div class="tl-left">' +
+                                '<div class="tl-list-header">Task name</div>' +
+                                '<div class="tl-list"></div>' +
+                            '</div>' +
+                            '<div class="tl-right">' +
+                                '<div class="timeline-header"></div>' +
+                                '<div class="timeline-rows"></div>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
+                break;
         }
 
         console.log('Generated HTML:', html);
@@ -1187,33 +1281,44 @@ class SprintSpaceWorkspaceApp {
                     const newElement = tempDiv.firstElementChild;
                     
                     if (newElement) {
-                        updatedRange.insertNode(newElement);
-                        console.log('Inserted new element:', newElement);
-                        
+                        // Find the closest sprintspace-block to avoid nesting blocks inside paragraphs
+                        let container = updatedRange.commonAncestorContainer;
+                        if (container.nodeType === Node.TEXT_NODE) {
+                            container = container.parentElement;
+                        }
+                        const currentBlock = container ? container.closest('.sprintspace-block') : null;
+
+                        if (currentBlock && currentBlock.parentNode) {
+                            currentBlock.parentNode.insertBefore(newElement, currentBlock.nextSibling);
+                            console.log('Inserted new element after current block to avoid nesting:', newElement);
+                            
+                            // If the current block is an empty paragraph after slash removal, remove it
+                            if (currentBlock.getAttribute && currentBlock.getAttribute('data-block-type') === 'paragraph') {
+                                const p = currentBlock.querySelector('p[contenteditable="true"]');
+                                const isEmpty = p && (p.textContent.trim() === '' || p.innerHTML.trim() === '' || p.innerHTML.trim() === '<br>');
+                                if (isEmpty) {
+                                    currentBlock.remove();
+                                }
+                            }
+                        } else {
+                            // Fallback to direct insertion at range
+                            updatedRange.insertNode(newElement);
+                            console.log('Inserted new element at selection (fallback):', newElement);
+                        }
+
                         // Force a reflow to ensure the element is rendered
                         newElement.offsetHeight; // Trigger reflow
-                    
+
                         // Move cursor to after the inserted content safely
                         try {
-                            const insertedNode = newElement;
-                            if (insertedNode && insertedNode.nodeType === Node.ELEMENT_NODE) {
-                                updatedRange.setStartAfter(insertedNode);
-                                updatedRange.collapse(true);
-                                selection.removeAllRanges();
-                                selection.addRange(updatedRange);
-                                console.log('Positioned cursor after inserted element');
-                            } else {
-                                console.log('Could not position cursor, using fallback');
-                                // Fallback: position at end of editor
-                                const fallbackRange = document.createRange();
-                                fallbackRange.selectNodeContents(editor);
-                                fallbackRange.collapse(false);
-                                selection.removeAllRanges();
-                                selection.addRange(fallbackRange);
-                            }
+                            const afterRange = document.createRange();
+                            afterRange.setStartAfter(newElement);
+                            afterRange.collapse(true);
+                            selection.removeAllRanges();
+                            selection.addRange(afterRange);
+                            console.log('Positioned cursor after inserted element');
                         } catch (error) {
                             console.error('Error positioning cursor:', error);
-                            // Fallback: position at end of editor
                             const fallbackRange = document.createRange();
                             fallbackRange.selectNodeContents(editor);
                             fallbackRange.collapse(false);
@@ -1270,49 +1375,48 @@ class SprintSpaceWorkspaceApp {
                     if (newElement) {
                         const newRange = document.createRange();
                         
-                        // Select all text content in the element for immediate editing
-                        if (newElement.firstChild && newElement.firstChild.nodeType === Node.TEXT_NODE) {
-                            newRange.setStart(newElement.firstChild, 0);
-                            newRange.setEnd(newElement.firstChild, newElement.firstChild.textContent.length);
-                            console.log('Selected text node content:', newElement.firstChild.textContent);
+                        // Place caret at the start for headings/lists so placeholder stays visible
+                        if (type === 'heading' || type === 'list' || type === 'numbered') {
+                            if (newElement.firstChild && newElement.firstChild.nodeType === Node.TEXT_NODE) {
+                                newRange.setStart(newElement.firstChild, 0);
+                                newRange.setEnd(newElement.firstChild, 0);
+                            } else {
+                                newRange.setStart(newElement, 0);
+                                newRange.collapse(true);
+                            }
                         } else {
-                            newRange.selectNodeContents(newElement);
-                            console.log('Selected entire element contents');
+                            // Default: select contents to let user overwrite quickly
+                            if (newElement.firstChild && newElement.firstChild.nodeType === Node.TEXT_NODE) {
+                                newRange.setStart(newElement.firstChild, 0);
+                                newRange.setEnd(newElement.firstChild, newElement.firstChild.textContent.length);
+                            } else {
+                                newRange.selectNodeContents(newElement);
+                            }
                         }
                         
                         selection.removeAllRanges();
                         selection.addRange(newRange);
-                        
-                        // Ensure the editor is focused
                         editor.focus();
-                        console.log('Positioned cursor and selected text in new element');
+                        console.log('Positioned cursor in the new element');
                     } else {
                         console.log('New element still not found, positioning cursor after insertion');
-                        // Fallback: position cursor after the last inserted content
                         const range = document.createRange();
                         range.selectNodeContents(editor);
-                        range.collapse(false); // Move to end
+                        range.collapse(false);
                         selection.removeAllRanges();
                         selection.addRange(range);
                         editor.focus();
-                        
-                        // Add a new paragraph after the inserted element for continued typing
-                        const br = document.createElement('p');
-                        br.innerHTML = '<br>';
-                        editor.appendChild(br);
-                        
-                        // Position cursor in the new paragraph
-                        const newRange = document.createRange();
-                        newRange.selectNodeContents(br);
-                        newRange.collapse(true);
-                        selection.removeAllRanges();
-                        selection.addRange(newRange);
                     }
                 }, 50);
                 
                 // ALWAYS ensure there's an editable paragraph after the inserted block
+                // but do NOT steal focus from the newly inserted element
                 setTimeout(() => {
+                    const activeEl = document.activeElement;
                     this.ensureEditableSpaceAfterBlock(editor, type);
+                    if (activeEl && typeof activeEl.focus === 'function') {
+                        activeEl.focus();
+                    }
                 }, 100);
                 
                 // Focus the editor
@@ -1330,6 +1434,8 @@ class SprintSpaceWorkspaceApp {
                 }, 100);
             }
         }
+        // Clear insertion lock
+        this._isInsertingBlock = false;
     }
 
     ensureEditableSpaceAfterBlock(editor, blockType) {
@@ -1415,6 +1521,8 @@ class SprintSpaceWorkspaceApp {
             this.initializeTableFeatures();
         } else if (blockType === 'toggle') {
             this.initializeToggleFeatures();
+        } else if (blockType === 'timeline') {
+            this.initializeTimelineFeatures();
         }
     }
     
@@ -1539,6 +1647,234 @@ class SprintSpaceWorkspaceApp {
                 countElement.textContent = tasks.length;
             }
         });
+    }
+
+    // ==================== TIMELINE FEATURES ====================
+    initializeTimelineFeatures() {
+        const block = document.querySelector('.timeline-block:last-of-type');
+        if (!block) return;
+
+        // Setup range change
+        const rangeSel = block.querySelector('.timeline-range');
+        rangeSel.onchange = () => {
+            block.dataset.rangeDays = rangeSel.value;
+            this.renderTimeline(block);
+        };
+
+        // Add task handler
+        const addBtn = block.querySelector('.add-timeline-task');
+        addBtn.onclick = () => this.addTimelineTask(block);
+
+        // Initial render
+        if (!block.timelineData) block.timelineData = { tasks: [] };
+        this.renderTimeline(block);
+    }
+
+    renderTimeline(block) {
+        const days = parseInt(block.dataset.rangeDays || '14', 10);
+        const start = new Date();
+        const header = block.querySelector('.timeline-header');
+        const rows = block.querySelector('.timeline-rows');
+        const list = block.querySelector('.tl-list');
+        header.innerHTML = '<div class="tl-months"></div><div class="tl-days"></div>';
+        rows.innerHTML = '';
+        list.innerHTML = '';
+        const monthsEl = header.querySelector('.tl-months');
+        const daysEl = header.querySelector('.tl-days');
+
+        // Build month segments (month-year labels spanning appropriate number of days)
+        let cursor = new Date(start);
+        let segmentMonth = cursor.getMonth();
+        let segmentYear = cursor.getFullYear();
+        let segmentCount = 0;
+        const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        for (let i=0;i<days;i++) {
+            const d = new Date(start); d.setDate(start.getDate()+i);
+            const month = d.getMonth();
+            const year = d.getFullYear();
+            if (month !== segmentMonth || year !== segmentYear) {
+                // flush previous segment
+                const seg = document.createElement('div');
+                seg.className = 'tl-month';
+                seg.style.width = `${segmentCount * 32}px`;
+                seg.textContent = `${monthNames[segmentMonth]} ${segmentYear}`;
+                monthsEl.appendChild(seg);
+                // reset
+                segmentMonth = month; segmentYear = year; segmentCount = 0;
+            }
+            segmentCount++;
+            // day cell
+            const dayCell = document.createElement('div');
+            const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+            dayCell.className = 'tl-day' + (isWeekend ? ' weekend' : '');
+            dayCell.textContent = d.getDate();
+            daysEl.appendChild(dayCell);
+        }
+        // flush last segment
+        if (segmentCount > 0) {
+            const seg = document.createElement('div');
+            seg.className = 'tl-month';
+            seg.style.width = `${segmentCount * 32}px`;
+            seg.textContent = `${monthNames[segmentMonth]} ${segmentYear}`;
+            monthsEl.appendChild(seg);
+        }
+
+        (block.timelineData.tasks || []).forEach((t, idx) => {
+            // Left list item
+            const li = document.createElement('div');
+            li.className = 'tl-list-item';
+            li.innerHTML = `
+                <div class="tl-title">${t.title||'Task'}</div>
+                <div class="tl-actions"><button class="tl-del" title="Delete">🗑️</button></div>
+            `;
+            list.appendChild(li);
+            li.onclick = (e) => {
+                // Open details drawer when clicking on list item (not when selecting text)
+                if (window.getSelection && window.getSelection().toString()) return;
+                this.openTimelineTaskPanel(block, t, idx);
+            };
+            // Delete action (stop propagation so it won't open the drawer)
+            const delBtn = li.querySelector('.tl-del');
+            delBtn.onclick = (e) => {
+                e.stopPropagation();
+                if (confirm('Delete this task?')) {
+                    block.timelineData.tasks.splice(idx, 1);
+                    this.renderTimeline(block);
+                }
+            };
+
+            // Right timeline row
+            const row = document.createElement('div');
+            row.className = 'tl-row';
+            row.innerHTML = `<div class="tl-track"></div>`;
+            rows.appendChild(row);
+
+            // Render bar if dates are set
+            const track = row.querySelector('.tl-track');
+            const s = t.start ? new Date(t.start) : null;
+            const e = t.due ? new Date(t.due) : null;
+            if (s && e && e >= s) {
+                const day0 = new Date(start); day0.setHours(0,0,0,0);
+                const left = Math.max(0, Math.round((s - day0) / 86400000));
+                const width = Math.max(1, Math.round((e - s) / 86400000) + 1);
+                const bar = document.createElement('div');
+                bar.className = 'tl-bar';
+                bar.style.left = `${left * 32}px`;
+                bar.style.width = `${width * 32 - 4}px`;
+                track.appendChild(bar);
+            }
+
+            // All edits happen in the left drawer; this view is read-only
+        });
+    }
+
+    async populateAssignees(selectEl, selected) {
+        try {
+            const r = await frappe.call({ method: 'sprintspace.sprintspace.doctype.sprintspace_page.sprintspace_page.get_company_users' });
+            const users = r.message || [];
+            selectEl.innerHTML = '<option value="">Unassigned</option>' + users.map(u => `<option value="${u.name}">${u.full_name||u.name}</option>`).join('');
+            if (selected) selectEl.value = selected;
+        } catch (e) {
+            selectEl.innerHTML = '<option value="">Unassigned</option>';
+        }
+    }
+
+    addTimelineTask(block) {
+        block.timelineData = block.timelineData || { tasks: [] };
+        const task = { title: 'New Task' };
+        block.timelineData.tasks.push(task);
+        this.renderTimeline(block);
+        // Open panel immediately to fill details
+        const idx = block.timelineData.tasks.length - 1;
+        this.openTimelineTaskPanel(block, task, idx);
+    }
+
+    // ---------- Timeline Drawer ----------
+    showLeftDrawerHTML(title, html) {
+        const modalOverlay = document.getElementById('modal-overlay');
+        const modal = document.getElementById('modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalContent = document.getElementById('modal-content');
+        if (!modalOverlay || !modal || !modalTitle || !modalContent) return;
+        modalTitle.textContent = title;
+        modalContent.innerHTML = html;
+        modalOverlay.classList.add('show');
+        // Drawer styles (RIGHT side)
+        modalOverlay.style.display = 'flex';
+        modalOverlay.style.alignItems = 'stretch';
+        modalOverlay.style.justifyContent = 'flex-end';
+        modalOverlay.style.background = 'rgba(0,0,0,0.5)';
+        modal.style.width = '420px';
+        modal.style.height = '100vh';
+        modal.style.borderRadius = '12px 0 0 12px';
+        modal.style.margin = '0';
+        modal.style.transform = 'translateX(0)';
+        modal.style.display = 'block';
+    }
+
+    openTimelineTaskPanel(block, task, index) {
+        const html = `
+            <div style="display:flex; flex-direction:column; gap:12px;">
+                <div class="form-group">
+                    <label>Title</label>
+                    <input type="text" id="tlp-title" value="${task.title||''}" placeholder="Task title">
+                </div>
+                <div class="form-group">
+                    <label>Status</label>
+                    <select id="tlp-status">
+                        <option ${task.status==='Not Started'?'selected':''}>Not Started</option>
+                        <option ${task.status==='In Progress'?'selected':''}>In Progress</option>
+                        <option ${task.status==='Done'?'selected':''}>Done</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Start</label>
+                        <input type="date" id="tlp-start" value="${task.start||''}">
+                    </div>
+                    <div class="form-group">
+                        <label>Due</label>
+                        <input type="date" id="tlp-due" value="${task.due||''}">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Assignee</label>
+                    <select id="tlp-assignee"></select>
+                </div>
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="tlp-notes" rows="4" placeholder="Add any details..."></textarea>
+                </div>
+                <div style="display:flex; gap:8px; justify-content:flex-end;">
+                    <button class="btn btn-danger" id="tlp-delete">Delete</button>
+                    <button class="btn btn-secondary" id="tlp-cancel">Cancel</button>
+                    <button class="btn btn-primary" id="tlp-save">Save</button>
+                </div>
+            </div>
+        `;
+        this.showLeftDrawerHTML('Task', html);
+
+        // Populate assignees
+        this.populateAssignees(document.getElementById('tlp-assignee'), task.assignee);
+
+        document.getElementById('tlp-cancel').onclick = () => this.hideModal();
+        document.getElementById('tlp-delete').onclick = () => {
+            if (confirm('Delete this task?')) {
+                const i = block.timelineData.tasks.indexOf(task);
+                if (i > -1) block.timelineData.tasks.splice(i, 1);
+                this.hideModal();
+                this.renderTimeline(block);
+            }
+        };
+        document.getElementById('tlp-save').onclick = () => {
+            task.title = document.getElementById('tlp-title').value || task.title;
+            task.status = document.getElementById('tlp-status').value;
+            task.start = document.getElementById('tlp-start').value || '';
+            task.due = document.getElementById('tlp-due').value || '';
+            task.assignee = document.getElementById('tlp-assignee').value || '';
+            this.hideModal();
+            this.renderTimeline(block);
+        };
     }
     
     showFilterMenu() {
@@ -2719,29 +3055,69 @@ class SprintSpaceWorkspaceApp {
 
     showCreateWorkspaceModal() {
         console.log('showCreateWorkspaceModal called');
-        this.showModal({
-            title: 'Create New Workspace',
-            fields: [
-                { label: 'Workspace Title', name: 'title', type: 'text', required: true },
-                { label: 'Description', name: 'description', type: 'text' }
-            ],
-            onSubmit: (data) => {
-                console.log('Modal submitted with data:', data);
-                this.createWorkspace(data.title, data.description);
-            }
+        // Use the unified settings form inside modal
+        const html = window.SprintSpaceUI.renderVisibilityCollaboratorsForm({
+            title: 'Workspace Settings',
+            scope: 'workspace',
+            record: { visibility: 'Private', collaborators: [] }
         });
+        const formHtml = `
+            <div class="form-group">
+                <label>Workspace Title *</label>
+                <input type="text" id="ws-title" placeholder="Enter title" required>
+            </div>
+            <div class="form-group">
+                <label>Description</label>
+                <input type="text" id="ws-desc" placeholder="Optional">
+            </div>
+            ${html}
+        `;
+        this.showModalHTML('Create New Workspace', formHtml);
+        window.SprintSpaceUI.attachSettingsHandlers('workspace', null, 'create');
+        // Wire save to create
+        const saveBtn = document.getElementById('vs-save');
+        if (saveBtn) {
+            saveBtn.textContent = 'Create';
+            saveBtn.onclick = async () => {
+                const title = document.getElementById('ws-title').value || '';
+                const description = document.getElementById('ws-desc').value || '';
+                if (!title.trim()) { frappe.show_alert({message:'Title required', indicator:'red'}); return; }
+                await this.createWorkspace(title, description);
+            };
+        }
     }
 
     showCreatePageModal() {
-        this.showModal({
-            title: 'Create New Page',
-            fields: [
-                { label: 'Page Title', name: 'title', type: 'text', required: true }
-            ],
-            onSubmit: (data) => {
-                this.createPage(data.title);
-            }
+        const html = window.SprintSpaceUI.renderVisibilityCollaboratorsForm({
+            title: 'Page Settings',
+            scope: 'page',
+            record: { visibility: 'Use Workspace', collaborators: [] }
         });
+        const formHtml = `
+            <div class="form-group">
+                <label>Page Title *</label>
+                <input type="text" id="pg-title" placeholder="Enter title" required>
+            </div>
+            ${html}
+        `;
+        this.showModalHTML('Create New Page', formHtml);
+        window.SprintSpaceUI.attachSettingsHandlers('page', null, 'create');
+        // Populate company users for the first collaborator row if present
+        setTimeout(async () => {
+            const firstSelect = document.querySelector('#vs-collab-rows .collab-user');
+            if (firstSelect && window.SprintSpaceUI?.populateCompanyUsers) {
+                await window.SprintSpaceUI.populateCompanyUsers(firstSelect);
+            }
+        }, 0);
+        const saveBtn = document.getElementById('vs-save');
+        if (saveBtn) {
+            saveBtn.textContent = 'Create';
+            saveBtn.onclick = async () => {
+                const title = document.getElementById('pg-title').value || '';
+                if (!title.trim()) { frappe.show_alert({message:'Title required', indicator:'red'}); return; }
+                await this.createPage(title);
+            };
+        }
     }
 
     showModalHTML(title, html) {

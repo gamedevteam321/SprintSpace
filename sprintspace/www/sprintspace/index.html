@@ -6,67 +6,116 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
-    <!-- Create frappe object for API calls -->
+    <!-- Safe Frappe API shim (only if frappe.call is absent); use official route to avoid 404 -->
     <script>
-        window.frappe = {
-            call: function(options) {
-                return new Promise((resolve, reject) => {
-                    // Use jQuery's ajax if available, otherwise fallback to fetch
-                    if (window.$ && $.post) {
-                        const data = {
-                            cmd: options.method,
-                            ...options.args
-                        };
-                        
-                        $.post('/', data)
-                            .done(function(response) {
-                                if (typeof response === 'string') {
-                                    try {
-                                        response = JSON.parse(response);
-                                    } catch (e) {
-                                        reject(new Error('Invalid JSON response'));
-                                        return;
+        (function(){
+            if (!window.frappe) window.frappe = {};
+            if (!window.frappe.call) {
+                window.frappe.call = function(options) {
+                    return new Promise((resolve, reject) => {
+                        const path = '/api/method/' + options.method;
+                        if (window.$ && $.ajax) {
+                            $.ajax({
+                                url: path,
+                                method: 'POST',
+                                data: options.args || {},
+                                success: function(response){ resolve(response); },
+                                error: function(jqXHR){
+                                    let msg = 'Request failed';
+                                    try { msg = JSON.parse(jqXHR.responseText).message || msg; } catch(e) { msg = jqXHR.responseText || msg; }
+                                    reject(new Error(msg));
+                                }
+                            });
+                        } else {
+                            const formData = new URLSearchParams();
+                            if (options.args) {
+                                Object.keys(options.args).forEach(key => formData.append(key, options.args[key]));
+                            }
+                            fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: formData.toString() })
+                                .then(r => r.json()).then(resolve).catch(reject);
+                        }
+                    });
+                };
+                console.log('Frappe API shim initialized');
+            } else {
+                console.log('Using core frappe.call');
+            }
+            // Ensure any global website.js "call" uses the API route too
+            // Patch global jQuery $.post to route to /api/method/ if some script tries to post to '/'
+            if (window.$ && $.post) {
+                const originalPost = $.post;
+                $.post = function(url, data, success, dataType) {
+                    try {
+                        if (typeof url === 'string' && url.replace(/\/?$/, '/') === '/' && data && data.cmd) {
+                            const path = '/api/method/' + data.cmd;
+                            delete data.cmd;
+                            return originalPost.call($, path, data, success, dataType);
+                        }
+                    } catch (e) { /* fall through */ }
+                    return originalPost.apply($, arguments);
+                };
+
+                // Global guard: rewrite any jQuery AJAX POST to '/' with cmd → /api/method/<cmd>
+                if ($.ajaxPrefilter) {
+                    $.ajaxPrefilter(function(options, originalOptions, jqXHR) {
+                        try {
+                            const isPost = (options.type || options.method || 'GET').toUpperCase() === 'POST';
+                            const url = (options.url || '').replace(/\/?$/, '/');
+                            if (isPost && (url === '/' || url.endsWith('//'))) {
+                                // Extract cmd from data
+                                let dataObj = originalOptions.data;
+                                let cmd = null;
+                                if (typeof dataObj === 'string') {
+                                    const params = new URLSearchParams(dataObj);
+                                    cmd = params.get('cmd');
+                                    if (cmd) { params.delete('cmd'); options.data = params.toString(); }
+                                } else if (dataObj && typeof dataObj === 'object') {
+                                    if (typeof FormData !== 'undefined' && dataObj instanceof FormData) {
+                                        cmd = dataObj.get && dataObj.get('cmd');
+                                        // keep FormData as-is, just rewrite URL
+                                    } else {
+                                    cmd = dataObj.cmd;
+                                        if (cmd) { delete dataObj.cmd; options.data = dataObj; }
                                     }
                                 }
-                                resolve(response);
-                            })
-                            .fail(function(jqXHR, textStatus, errorThrown) {
-                                let errorMessage = 'Request failed';
-                                try {
-                                    const response = JSON.parse(jqXHR.responseText);
-                                    errorMessage = response.exc || response.message || errorMessage;
-                                } catch (e) {
-                                    errorMessage = jqXHR.responseText || errorMessage;
+                                if (cmd) {
+                                    options.url = '/api/method/' + cmd;
                                 }
-                                reject(new Error(errorMessage));
-                            });
-                    } else {
-                        // Fallback to fetch
-                        const formData = new URLSearchParams();
-                        formData.append('cmd', options.method);
-                        
-                        if (options.args) {
-                            Object.keys(options.args).forEach(key => {
-                                formData.append(key, options.args[key]);
-                            });
-                        }
-                        
-                        fetch('/', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/x-www-form-urlencoded'
-                            },
-                            body: formData.toString()
-                        })
-                        .then(response => response.json())
-                        .then(data => resolve(data))
-                        .catch(error => reject(error));
-                    }
-                });
+                            }
+                        } catch (e) { /* ignore */ }
+                    });
+                }
             }
-        };
-        
-        console.log('Frappe API initialized');
+
+            // Wrap fetch: rewrite POST '/' with cmd in body → /api/method/<cmd>
+            if (typeof window.fetch === 'function') {
+                const originalFetch = window.fetch.bind(window);
+                window.fetch = function(input, init) {
+                    try {
+                        const method = (init && (init.method || init.type)) || 'GET';
+                        let url = (typeof input === 'string' ? input : (input && input.url)) || '';
+                        const norm = url.replace(/\/?$/, '/');
+                        if (method.toUpperCase() === 'POST' && (norm === '/' || norm.endsWith('//'))) {
+                            let cmd = null;
+                            const body = init && init.body;
+                            if (typeof body === 'string') {
+                                const params = new URLSearchParams(body);
+                                cmd = params.get('cmd');
+                                if (cmd) { params.delete('cmd'); init.body = params.toString(); }
+                            } else if (typeof FormData !== 'undefined' && body instanceof FormData) {
+                                cmd = body.get && body.get('cmd');
+                                // leave body as-is
+                            }
+                            if (cmd) {
+                                const newUrl = '/api/method/' + cmd;
+                                if (typeof input === 'string') input = newUrl; else input = new Request(newUrl, input);
+                            }
+                        }
+                    } catch (e) { /* ignore and fall back */ }
+                    return originalFetch(input, init);
+                };
+            }
+        })();
     </script>
     
     <!-- SprintSpace styles -->
@@ -129,7 +178,7 @@
         #editor-area { 
             flex: 1; 
             padding: 20px 24px; 
-            max-width: 800px; 
+            max-width: 1200px; 
             margin: 0 auto; 
             width: 100%; 
             overflow-y: auto;
@@ -424,6 +473,21 @@
         <div id="workspace-header">
             <input type="text" id="page-title-editor" placeholder="Untitled" disabled>
             <button id="save-page-btn" class="btn btn-primary btn-sm" style="display: none;">Save</button>
+            <button id="page-settings-btn" class="btn btn-secondary btn-sm" style="margin-left: 8px; display:none;">Settings</button>
+            <script>
+                // Only show page settings to creator or workspace owner; server will enforce, but we can hide UI
+                document.addEventListener('sprintspace:page-loaded', function(e) {
+                    const btn = document.getElementById('page-settings-btn');
+                    if (!btn) return;
+                    const page = e.detail || {};
+                    const currentUser = (window.frappe && frappe.session_user) || null;
+                    if (currentUser && (page.created_by === currentUser || page.workspace_owner === currentUser)) {
+                        btn.style.display = 'inline-block';
+                    } else {
+                        btn.style.display = 'none';
+                    }
+                });
+            </script>
         </div>
         
         <div id="editor-area">
@@ -519,5 +583,207 @@ function createFirstWorkspace() {
         });
     }
 }
+
+// ---- Visibility & Collaborators UI helpers ----
+window.SprintSpaceUI = {
+    showWorkspaceSettings: async function(workspaceName) {
+        try {
+            const r = await frappe.call({
+                method: 'sprintspace.sprintspace.doctype.sprintspace_workspace.sprintspace_workspace.get_workspace_settings',
+                args: { workspace_name: workspaceName }
+            });
+            const data = r.message || {};
+            const html = this.renderVisibilityCollaboratorsForm({
+                title: 'Workspace Settings',
+                scope: 'workspace',
+                record: data
+            });
+            window.sprintSpaceApp.showModalHTML('Workspace Settings', html);
+            this.attachSettingsHandlers('workspace', workspaceName);
+        } catch (e) {
+            console.error(e);
+            frappe.show_alert({message: 'Failed to load workspace settings', indicator: 'red'});
+        }
+    },
+    showPageSettings: async function(pageName) {
+        try {
+            const r = await frappe.call({
+                method: 'sprintspace.sprintspace.doctype.sprintspace_page.sprintspace_page.get_page_settings',
+                args: { page_name: pageName }
+            });
+            const data = r.message || {};
+            const html = this.renderVisibilityCollaboratorsForm({
+                title: 'Page Settings',
+                scope: 'page',
+                record: data
+            });
+            window.sprintSpaceApp.showModalHTML('Page Settings', html);
+            this.attachSettingsHandlers('page', pageName);
+        } catch (e) {
+            console.error(e);
+            frappe.show_alert({message: 'Failed to load page settings', indicator: 'red'});
+        }
+    },
+    renderVisibilityCollaboratorsForm: function({title, scope, record}) {
+        const visOptions = scope === 'workspace'
+            ? ['Private','Company','Specific Users']
+            : ['Use Workspace','Private','Company','Specific Users'];
+        const visOptsHtml = visOptions.map(o => `<option value="${o}" ${record.visibility===o?'selected':''}>${o}</option>`).join('');
+        const rows = (record.collaborators||[]).map((r,i)=>`
+            <tr>
+                <td>
+                    <select class="collab-user" style="width:100%; min-width: 260px;">
+                        <option value="${r.user||''}">${r.user||'Select user'}</option>
+                    </select>
+                </td>
+                <td>
+                    <select class="collab-access" style="width:100%;">
+                        <option value="Viewer" ${r.access==='Viewer'?'selected':''}>Viewer</option>
+                        <option value="Editor" ${r.access==='Editor'?'selected':''}>Editor</option>
+                    </select>
+                </td>
+                <td><button class="btn btn-secondary btn-sm remove-collab">Remove</button></td>
+            </tr>`).join('');
+        return `
+            <div>
+                <div class="form-group">
+                    <label>Visibility</label>
+                    <select id="vs-visibility" style="width:100%;">${visOptsHtml}</select>
+                </div>
+                <div class="form-group" id="vs-company-wrap" style="display:${record.visibility==='Company'?'block':'none'};">
+                    <label>Company</label>
+                    <input type="text" id="vs-company" value="${record.company||''}" placeholder="Company name">
+                </div>
+                <div id="vs-collab-wrap" style="display:${record.visibility==='Specific Users'?'block':'none'};">
+                    <div style="display:flex;align-items:center;justify-content:space-between;">
+                        <label>Collaborators</label>
+                        <button class="btn btn-secondary btn-sm" id="vs-add-collab">Add</button>
+                    </div>
+                    <table style="width:100%;margin-top:8px;">
+                        <thead><tr><th>User</th><th>Access</th><th></th></tr></thead>
+                        <tbody id="vs-collab-rows">${rows}</tbody>
+                    </table>
+                </div>
+                <div class="modal-actions" style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end;">
+                    <button class="btn btn-secondary" onclick="window.sprintSpaceApp.hideModal()">Cancel</button>
+                    <button class="btn btn-primary" id="vs-save">Save</button>
+                </div>
+            </div>`;
+    },
+    attachSettingsHandlers: function(scope, name, mode) {
+        const vis = document.getElementById('vs-visibility');
+        const companyWrap = document.getElementById('vs-company-wrap');
+        const collabWrap = document.getElementById('vs-collab-wrap');
+        const collabRows = document.getElementById('vs-collab-rows');
+        const companyInput = document.getElementById('vs-company');
+        vis.addEventListener('change', ()=>{
+            companyWrap.style.display = (vis.value==='Company' ? 'block' : 'none');
+            collabWrap.style.display = (vis.value==='Specific Users' ? 'block' : 'none');
+        });
+        document.getElementById('vs-add-collab').addEventListener('click', async ()=>{
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td><select class=\"collab-user\" style=\"width:100%; min-width:260px;\"></select></td>
+                            <td><select class=\"collab-access\" style=\"width:100%;\"><option>Viewer</option><option>Editor</option></select></td>
+                            <td><button class="btn btn-secondary btn-sm remove-collab">Remove</button></td>`;
+            collabRows.appendChild(tr);
+            await window.SprintSpaceUI.populateCompanyUsers(tr.querySelector('.collab-user'));
+        });
+        collabRows.addEventListener('click', (e)=>{
+            if (e.target.classList.contains('remove-collab')) {
+                e.preventDefault();
+                const tr = e.target.closest('tr');
+                tr && tr.remove();
+            }
+        });
+        // Auto-populate company from server if empty and visibility requires it
+        const ensureCompany = async () => {
+            if (vis.value === 'Company' && companyInput && !companyInput.value) {
+                try {
+                    const r = await frappe.call({ method: 'sprintspace.sprintspace.doctype.sprintspace_workspace.sprintspace_workspace.get_current_user_company' });
+                    if (r.message && r.message.company && !companyInput.value) companyInput.value = r.message.company;
+                } catch (e) { /* no-op */ }
+            }
+        };
+        ensureCompany();
+        vis.addEventListener('change', ensureCompany);
+        // If switching to Specific Users, ensure creator appears in list as Editor (UI hint)
+        vis.addEventListener('change', async ()=>{
+            if (vis.value === 'Specific Users') {
+                // If no rows yet, add one row defaulting to current user
+                if (!collabRows.querySelector('tr')) {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `<td><select class=\"collab-user\" style=\"width:100%; min-width:260px;\"></select></td>
+                                    <td><select class=\"collab-access\" style=\"width:100%;\"><option>Viewer</option><option selected>Editor</option></select></td>
+                                    <td><button class=\"btn btn-secondary btn-sm remove-collab\">Remove</button></td>`;
+                    collabRows.appendChild(tr);
+                    await window.SprintSpaceUI.populateCompanyUsers(tr.querySelector('.collab-user'));
+                    // Select current user if present
+                    const sel = tr.querySelector('.collab-user');
+                    const currentUser = (window.frappe && frappe.session_user) || null;
+                    if (currentUser && sel && sel.querySelector(`option[value='${currentUser}']`)) {
+                        sel.value = currentUser;
+                    }
+                }
+            }
+        });
+
+        if (mode !== 'create') {
+        document.getElementById('vs-save').addEventListener('click', async ()=>{
+            const visibility = vis.value;
+            await ensureCompany();
+            const company = companyInput?.value || null;
+            const collabs = Array.from(collabRows.querySelectorAll('tr')).map(tr=>({
+                user: tr.querySelector('.collab-user')?.value || '',
+                access: tr.querySelector('.collab-access')?.value || 'Viewer'
+            })).filter(c=>c.user);
+            try {
+                if (scope==='workspace') {
+                    await frappe.call({
+                        method: 'sprintspace.sprintspace.doctype.sprintspace_workspace.sprintspace_workspace.update_workspace_settings',
+                        args: { workspace_name: name, visibility, company, collaborators: JSON.stringify(collabs) }
+                    });
+                    frappe.show_alert({message:'Workspace settings saved', indicator:'green'});
+                    window.sprintSpaceApp.refreshWorkspaceState();
+                } else {
+                    await frappe.call({
+                        method: 'sprintspace.sprintspace.doctype.sprintspace_page.sprintspace_page.update_page_settings',
+                        args: { page_name: name, visibility, company, collaborators: JSON.stringify(collabs) }
+                    });
+                    frappe.show_alert({message:'Page settings saved', indicator:'green'});
+                    // reload page list to reflect visibility changes
+                    if (window.sprintSpaceApp?.currentWorkspace) {
+                        window.sprintSpaceApp.loadPages();
+                    }
+                }
+                window.sprintSpaceApp.hideModal();
+            } catch(e) {
+                console.error(e);
+                frappe.show_alert({message:'Failed to save settings', indicator:'red'});
+            }
+        });
+        }
+    }
+};
+
+// Helper to fetch and populate users from company into a <select>
+window.SprintSpaceUI.populateCompanyUsers = async function(selectEl) {
+    try {
+        const r = await frappe.call({ method: 'sprintspace.sprintspace.doctype.sprintspace_page.sprintspace_page.get_company_users' });
+        const users = r.message || [];
+        selectEl.innerHTML = '<option value="">Select user</option>' + users.map(u => `<option value="${u.name}" title="${u.email}">${u.full_name||u.name}</option>`).join('');
+    } catch(e) {
+        console.error('Failed to load users', e);
+        selectEl.innerHTML = '<option value="">Select user</option>';
+    }
+};
+
+// Hook settings button
+document.addEventListener('click', (e)=>{
+    if (e.target && e.target.id === 'page-settings-btn') {
+        if (window.sprintSpaceApp?.currentPage) {
+            window.SprintSpaceUI.showPageSettings(window.sprintSpaceApp.currentPage);
+        }
+    }
+});
 </script>
 {% endblock %}

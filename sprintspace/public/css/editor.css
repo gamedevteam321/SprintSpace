@@ -2081,3 +2081,91 @@ h6[contenteditable="true"]:focus {
     font-style: normal;
     pointer-events: none;
 }
+
+/* ==================== CHECKLIST – REFINED UI ==================== */
+/* Put these at the end to override earlier checklist styles */
+.sprintspace-editor .checklist-list {
+    margin: 8px 0;
+    padding: 0;
+    list-style: none;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    background: #ffffff;
+}
+.sprintspace-editor .checklist-list .checklist-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid #f3f4f6;
+}
+.sprintspace-editor .checklist-list .checklist-item:last-child {
+    border-bottom: none;
+}
+.sprintspace-editor .checklist-list .checklist-item input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #4f46e5;
+    margin: 0 2px 0 0;
+    cursor: pointer;
+}
+.sprintspace-editor .checklist-list .checklist-item .cl-text {
+    flex: 1;
+    min-height: 20px;
+    padding: 4px 6px;
+    border: none;
+    outline: none;
+    border-radius: 6px;
+    background: transparent;
+}
+.sprintspace-editor .checklist-list .checklist-item .cl-text:focus {
+    background: rgba(79, 70, 229, 0.06);
+}
+.sprintspace-editor .checklist-list .checklist-item.completed .cl-text {
+    text-decoration: line-through;
+    color: #9ca3af;
+}
+
+/* ==================== TIMELINE BLOCK ==================== */
+.timeline-block { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; background: #fff; }
+.timeline-toolbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+.tl-toolbar-left { display:flex; gap:8px; align-items:center; }
+.tl-toolbar-right { display:flex; gap:8px; align-items:center; }
+.timeline-range {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    border: 1px solid #e5e7eb;
+    background: #ffffff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M6 8l4 4 4-4' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 10px center;
+    padding: 6px 28px 6px 10px;
+    border-radius: 8px;
+    color: #374151;
+    font-size: 13px;
+    line-height: 1.2;
+}
+.timeline-range:focus {
+    outline: none;
+    border-color: #4f46e5;
+    box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
+}
+.timeline-wrap { display:flex; }
+.tl-left { width: 320px; border-right:1px solid #e5e7eb; }
+.tl-list-header { font-size: 12px; color:#6b7280; padding:6px 8px; border-bottom:1px solid #e5e7eb; }
+.tl-list { }
+.tl-list-item { padding:8px; border-bottom:1px dashed #eef2f7; }
+.tl-list-item .tl-title { outline:none; cursor:pointer; }
+.tl-actions { display:none; float:right; }
+.tl-list-item:hover .tl-actions { display:inline-block; }
+.tl-del { background:none; border:none; cursor:pointer; color:#9ca3af; font-size:12px; padding:2px 4px; }
+.tl-del:hover { color:#dc2626; }
+.tl-right { flex: 1; overflow-x:auto; }
+.timeline-header { display:flex; flex-direction:column; gap:0; border-bottom:1px solid #e5e7eb; }
+.tl-months { display:flex; border-bottom:1px solid #e5e7eb; background:#fafbfc; }
+.tl-month { text-align:center; padding:6px 0; font-size:12px; color:#374151; font-weight:600; }
+.tl-days { display:flex; }
+.timeline-rows { }
+.tl-day { width:32px; text-align:center; font-size:12px; color:#6b7280; padding:6px 0; }
+.tl-day.weekend { background:#fafafa; }
+.tl-row { display:block; padding:6px 8px; border-bottom:1px dashed #eef2f7; }
+.tl-track { position:relative; height:28px; }
+.tl-bar { position:absolute; top:6px; height:16px; background:#4f46e5; border-radius:8px; opacity:0.9; }
