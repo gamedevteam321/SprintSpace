@@ -29,6 +29,7 @@ class SprintSpaceWorkspaceApp {
         
         this.setupEventListeners();
         this.initializeChecklistFeatures(); // Initialize checklist functionality globally
+        this.initializeListFeatures(); // Initialize UL/OL behavior globally
         this.initializeBlockMenuManagement(); // Initialize block menu visibility management
         await this.loadWorkspaces();
     }
@@ -699,6 +700,10 @@ class SprintSpaceWorkspaceApp {
             this.setupWorkspaceEditor(editor, commandMenu);
         }
         
+        // Ensure list/checklist handlers are bound for the active editor
+        try { this.initializeListFeatures(); } catch (e) { console.warn('initializeListFeatures failed', e); }
+        try { this.initializeChecklistFeatures(); } catch (e) { console.warn('initializeChecklistFeatures failed', e); }
+
         // Set up auto-save
         this.setupAutoSave();
         console.log('Page editor setup complete');
@@ -1176,7 +1181,7 @@ class SprintSpaceWorkspaceApp {
                 break;
             case 'numbered':
                 // Empty numbered list item; placeholder shown via CSS
-                html = '<div class="sprintspace-block" data-block-type="numbered"><div class="block-menu-wrapper"><button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button></div><ol><li contenteditable="true"></li></ol></div>';
+                html = '<div class="sprintspace-block" data-block-type="numbered"><div class="block-menu-wrapper"><button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button></div><ol class="numbered-list"><li class="numbered-item" contenteditable="true" data-item-number="1"><div class="block-menu-wrapper"><button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button></div><div class="item-content"></div></li></ol></div>';
                 break;
             case 'checklist':
                 html = '<div class="sprintspace-block" data-block-type="checklist">' +
@@ -1186,7 +1191,7 @@ class SprintSpaceWorkspaceApp {
                     '<ul class="checklist-list" contenteditable="false">' +
                         '<li class="checklist-item">' +
                             '<input type="checkbox" onchange="this.closest(\'li\').classList.toggle(\'completed\', this.checked)">' +
-                            '<div class="cl-text" contenteditable="true">To-do</div>' +
+                            '<div class="cl-text" contenteditable="true" data-placeholder="Add a to-do item"></div>' +
                         '</li>' +
                     '</ul>' +
                 '</div>';
@@ -1349,71 +1354,111 @@ class SprintSpaceWorkspaceApp {
             try {
                 console.log('Editor content before insertion:', editor.innerHTML);
                 
-                // Check if editor is empty or has placeholder text
-                const editorContent = editor.innerHTML.trim();
-                if (editorContent === '' || 
-                    editorContent === '<p>Type \'/\' for commands or start writing...</p>' ||
-                    editorContent === '<p><br></p>' ||
-                    editorContent === '<p></p>') {
-                    // Replace empty content
-                    editor.innerHTML = html;
-                    console.log('Replaced empty editor content with:', html);
+                // Determine if we're inserting inside a toggle's content
+                let commonContainer = range.commonAncestorContainer;
+                if (commonContainer && commonContainer.nodeType === Node.TEXT_NODE) {
+                    commonContainer = commonContainer.parentElement;
+                }
+                const toggleContent = commonContainer ? commonContainer.closest('.toggle-content') : null;
+
+                // Create a temporary element to obtain the new block node
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = html;
+                const newElement = tempDiv.firstElementChild;
+
+                if (toggleContent) {
+                    // Inserting inside a toggle: place the block within the toggle-content
+                    let anchor = commonContainer ? (commonContainer.closest('.sprintspace-block') || commonContainer.closest('.toggle-item')) : null;
+                    if (anchor && anchor.parentNode === toggleContent) {
+                        anchor.parentNode.insertBefore(newElement, anchor.nextSibling);
+                    } else {
+                        toggleContent.appendChild(newElement);
+                    }
+
+                    // If there is an empty placeholder toggle-item, remove it
+                    const currentItemEditable = commonContainer ? commonContainer.closest('.toggle-item') : null;
+                    if (currentItemEditable) {
+                        const textEl = currentItemEditable.querySelector('[contenteditable="true"]');
+                        if (!textEl || (textEl.textContent || '').trim() === '' || (textEl.innerHTML || '').trim() === '' || (textEl.innerHTML || '').trim() === '<br>') {
+                            currentItemEditable.remove();
+                        }
+                    }
+
+                    // Reposition caret after the inserted element
+                    try {
+                        const afterRange = document.createRange();
+                        afterRange.setStartAfter(newElement);
+                        afterRange.collapse(true);
+                        selection.removeAllRanges();
+                        selection.addRange(afterRange);
+                    } catch (err) {}
+
+                    // Initialize features and ensure space inside this container
+                    try { this.initializeBlockFeatures(type); } catch(e) {}
+                    this.ensureEditableSpaceAfterInContainer(toggleContent, type);
                 } else {
-                    // Insert at the current cursor position (after slash removal)
-                    const updatedRange = selection.getRangeAt(0);
-                    // Create a temporary div to hold the HTML and get the actual element
-                    const tempDiv = document.createElement('div');
-                    tempDiv.innerHTML = html;
-                    const newElement = tempDiv.firstElementChild;
-                    
-                    if (newElement) {
-                        // Find the closest sprintspace-block to avoid nesting blocks inside paragraphs
-                        let container = updatedRange.commonAncestorContainer;
-                        if (container.nodeType === Node.TEXT_NODE) {
-                            container = container.parentElement;
-                        }
-                        const currentBlock = container ? container.closest('.sprintspace-block') : null;
-
-                        if (currentBlock && currentBlock.parentNode) {
-                            currentBlock.parentNode.insertBefore(newElement, currentBlock.nextSibling);
-                            console.log('Inserted new element after current block to avoid nesting:', newElement);
-                            
-                            // If the current block is an empty paragraph after slash removal, remove it
-                            if (currentBlock.getAttribute && currentBlock.getAttribute('data-block-type') === 'paragraph') {
-                                const p = currentBlock.querySelector('p[contenteditable="true"]');
-                                const isEmpty = p && (p.textContent.trim() === '' || p.innerHTML.trim() === '' || p.innerHTML.trim() === '<br>');
-                                if (isEmpty) {
-                                    currentBlock.remove();
-                                }
+                    // Normal top-level insertion
+                    // Check if editor is empty or has placeholder text
+                    const editorContent = editor.innerHTML.trim();
+                    if (editorContent === '' || 
+                        editorContent === '<p>Type \'/\' for commands or start writing...</p>' ||
+                        editorContent === '<p><br></p>' ||
+                        editorContent === '<p></p>') {
+                        // Replace empty content
+                        editor.innerHTML = html;
+                        console.log('Replaced empty editor content with:', html);
+                    } else {
+                        // Insert at the current cursor position (after slash removal)
+                        const updatedRange = selection.getRangeAt(0);
+                        if (newElement) {
+                            // Find the closest sprintspace-block to avoid nesting blocks inside paragraphs
+                            let container = updatedRange.commonAncestorContainer;
+                            if (container.nodeType === Node.TEXT_NODE) {
+                                container = container.parentElement;
                             }
-                        } else {
-                            // Fallback to direct insertion at range
-                            updatedRange.insertNode(newElement);
-                            console.log('Inserted new element at selection (fallback):', newElement);
+                            const currentBlock = container ? container.closest('.sprintspace-block') : null;
+
+                            if (currentBlock && currentBlock.parentNode) {
+                                currentBlock.parentNode.insertBefore(newElement, currentBlock.nextSibling);
+                                console.log('Inserted new element after current block to avoid nesting:', newElement);
+                                
+                                // If the current block is an empty paragraph after slash removal, remove it
+                                if (currentBlock.getAttribute && currentBlock.getAttribute('data-block-type') === 'paragraph') {
+                                    const p = currentBlock.querySelector('p[contenteditable="true"]');
+                                    const isEmpty = p && (p.textContent.trim() === '' || p.innerHTML.trim() === '' || p.innerHTML.trim() === '<br>');
+                                    if (isEmpty) {
+                                        currentBlock.remove();
+                                    }
+                                }
+                            } else {
+                                // Fallback to direct insertion at range
+                                updatedRange.insertNode(newElement);
+                                console.log('Inserted new element at selection (fallback):', newElement);
+                            }
+
+                            // Force a reflow to ensure the element is rendered
+                            newElement.offsetHeight; // Trigger reflow
+
+                            // Move cursor to after the inserted content safely
+                            try {
+                                const afterRange = document.createRange();
+                                afterRange.setStartAfter(newElement);
+                                afterRange.collapse(true);
+                                selection.removeAllRanges();
+                                selection.addRange(afterRange);
+                                console.log('Positioned cursor after inserted element');
+                            } catch (error) {
+                                console.error('Error positioning cursor:', error);
+                                const fallbackRange = document.createRange();
+                                fallbackRange.selectNodeContents(editor);
+                                fallbackRange.collapse(false);
+                                selection.removeAllRanges();
+                                selection.addRange(fallbackRange);
+                            }
+
+                            // Initialize the just-inserted block features immediately
+                            try { this.initializeBlockFeatures(type); } catch(e) {}
                         }
-
-                        // Force a reflow to ensure the element is rendered
-                        newElement.offsetHeight; // Trigger reflow
-
-                        // Move cursor to after the inserted content safely
-                        try {
-                            const afterRange = document.createRange();
-                            afterRange.setStartAfter(newElement);
-                            afterRange.collapse(true);
-                            selection.removeAllRanges();
-                            selection.addRange(afterRange);
-                            console.log('Positioned cursor after inserted element');
-                        } catch (error) {
-                            console.error('Error positioning cursor:', error);
-                            const fallbackRange = document.createRange();
-                            fallbackRange.selectNodeContents(editor);
-                            fallbackRange.collapse(false);
-                            selection.removeAllRanges();
-                            selection.addRange(fallbackRange);
-                        }
-
-                        // Initialize the just-inserted block features immediately
-                        try { this.initializeBlockFeatures(type); } catch(e) {}
                     }
                 }
                 // Close the 'else' block that handles non-empty editor insertion
@@ -1502,7 +1547,15 @@ class SprintSpaceWorkspaceApp {
                 // but do NOT steal focus from the newly inserted element
                 setTimeout(() => {
                     const activeEl = document.activeElement;
-                    this.ensureEditableSpaceAfterBlock(editor, type);
+                    // If inserted within a toggle, ensure space inside that container; else top-level
+                    const latestCommon = window.getSelection() && window.getSelection().rangeCount > 0 ? window.getSelection().getRangeAt(0).commonAncestorContainer : null;
+                    let latestEl = latestCommon && latestCommon.nodeType === Node.ELEMENT_NODE ? latestCommon : (latestCommon ? latestCommon.parentElement : null);
+                    const latestToggleContent = latestEl ? latestEl.closest('.toggle-content') : null;
+                    if (latestToggleContent) {
+                        this.ensureEditableSpaceAfterInContainer(latestToggleContent, type);
+                    } else {
+                        this.ensureEditableSpaceAfterBlock(editor, type);
+                    }
                     if (activeEl && typeof activeEl.focus === 'function') {
                         activeEl.focus();
                     }
@@ -1528,10 +1581,16 @@ class SprintSpaceWorkspaceApp {
     }
 
     ensureEditableSpaceAfterBlock(editor, blockType) {
+        // Delegate to generic container-based function using the editor as container
+        this.ensureEditableSpaceAfterInContainer(editor, blockType);
+    }
+
+    // Generic helper that works for the main editor and for containers like .toggle-content
+    ensureEditableSpaceAfterInContainer(container, blockType) {
         console.log('Ensuring editable space after block type:', blockType);
         
-        // Check if the last element in the editor is editable
-        const lastChild = editor.lastElementChild;
+        // Check if the last element in the container is editable
+        const lastChild = container.lastElementChild;
         
         // List of block types that need guaranteed editable space after them
         const needsSpaceAfter = ['kanban', 'todolist', 'divider', 'heading'];
@@ -1565,7 +1624,7 @@ class SprintSpaceWorkspaceApp {
                 <p contenteditable="true"><br></p>
             `;
             
-            editor.appendChild(newParagraph);
+            container.appendChild(newParagraph);
             
             // Position cursor in the new paragraph
             setTimeout(() => {
@@ -4452,8 +4511,27 @@ class SprintSpaceWorkspaceApp {
         
         const block = this.currentMenuBlock;
         
-        // Remove the block from DOM
-        block.remove();
+        // Special handling for numbered list items
+        if (block.classList.contains('numbered-item')) {
+            const listEl = block.closest('.numbered-list');
+            if (listEl) {
+                // Remove the item and renumber remaining items
+                block.remove();
+                this.renumberListItems(listEl);
+                
+                // If no items left, remove the entire list block
+                if (listEl.children.length === 0) {
+                    const listBlock = listEl.closest('.sprintspace-block');
+                    if (listBlock) {
+                        listBlock.remove();
+                    }
+                }
+            }
+        } else {
+            // Regular block deletion
+            block.remove();
+        }
+        
         console.log('Deleted block:', block.dataset.blockType);
         
         // Hide menu
@@ -4523,7 +4601,8 @@ class SprintSpaceWorkspaceApp {
             }
             if (e.key === 'Backspace' && e.target.matches('.checklist-list .cl-text[contenteditable="true"]')) {
                 const wrapper = e.target.closest('.checklist-item');
-                if (wrapper && e.target.textContent.trim() === '') {
+                const isEmpty = e.target.textContent.trim() === '' || e.target.textContent.trim() === 'To-do' || e.target.textContent.trim() === 'Add a to-do item';
+                if (wrapper && isEmpty) {
                     // Remove empty item on backspace to behave like Notion
                     e.preventDefault();
                     const list = wrapper.parentElement;
@@ -4542,23 +4621,42 @@ class SprintSpaceWorkspaceApp {
             event.preventDefault();
             const checklist = element.closest('.checklist-list');
             const currentBlock = element.closest('.sprintspace-block');
-            const isEmpty = element.textContent.trim() === '' || element.textContent.trim() === 'To-do';
+            const isEmpty = element.textContent.trim() === '' || element.textContent.trim() === 'To-do' || element.textContent.trim() === 'Add a to-do item';
             // Track consecutive Enters
             this._checklistEnterCount = (this._checklistEnterCount || 0) + 1;
             clearTimeout(this._checklistEnterResetTimer);
             this._checklistEnterResetTimer = setTimeout(() => { this._checklistEnterCount = 0; }, 600);
             // Double-Enter on empty exits checklist
             if (isEmpty && this._checklistEnterCount >= 2) {
-                const editor = document.getElementById('sprintspace-editor');
-                const para = document.createElement('p');
-                para.setAttribute('contenteditable', 'true');
-                para.innerHTML = '<br>';
+                const para = this.createEmptyParagraphBlock();
                 currentBlock.insertAdjacentElement('afterend', para);
-                setTimeout(() => para.focus(), 10);
+                setTimeout(() => {
+                    const p = para.querySelector('p[contenteditable="true"]');
+                    if (p) p.focus();
+                }, 10);
                 this._checklistEnterCount = 0;
                 return;
             }
-            // Default: always add a new checklist item
+            // If empty, remove the empty checklist item and create a new paragraph after the checklist block
+            if (isEmpty) {
+                // Remove the empty checklist item
+                const emptyItem = element.closest('.checklist-item');
+                if (emptyItem) {
+                    emptyItem.remove();
+                }
+                
+                // Create a new paragraph after the checklist block
+                const para = this.createEmptyParagraphBlock();
+                currentBlock.insertAdjacentElement('afterend', para);
+                setTimeout(() => {
+                    const p = para.querySelector('p[contenteditable="true"]');
+                    if (p) p.focus();
+                }, 10);
+                this._checklistEnterCount = 0;
+                return;
+            }
+            
+            // Only add new checklist item if not empty
             this.addChecklistItem(checklist);
             this._checklistEnterCount = 0;
         }
@@ -4567,7 +4665,7 @@ class SprintSpaceWorkspaceApp {
     addChecklistItem(checklist) {
         const newItemHtml = '<li class="checklist-item">' +
             '<input type="checkbox" onchange="this.closest(\'li\').classList.toggle(\'completed\', this.checked)">' + 
-            '<div class="cl-text" contenteditable="true">To-do</div>' +
+            '<div class="cl-text" contenteditable="true" data-placeholder="Add a to-do item"></div>' +
         '</li>';
         checklist.insertAdjacentHTML('beforeend', newItemHtml);
         setTimeout(() => {
@@ -4781,6 +4879,253 @@ class SprintSpaceWorkspaceApp {
             if (titleElement && titleElement.textContent.startsWith('Toggle ')) {
                 titleElement.textContent = `Toggle ${number}`;
             }
+        });
+    }
+
+    // ==================== LIST (UL/OL) FEATURES ====================
+
+    initializeListFeatures() {
+        const editor = document.getElementById('sprintspace-editor');
+        if (!editor) return;
+        // Remove prior handler if present
+        editor.removeEventListener('keydown', this.listKeydownHandler);
+
+        this.listKeydownHandler = (e) => {
+            // Skip checklists
+            if (e.target && e.target.closest && e.target.closest('.checklist-list')) return;
+
+            // Find the LI element if caret is inside one
+            let li = e.target && (e.target.closest ? e.target.closest('li') : null);
+            
+            // For numbered lists, also check if we're inside the item-content div
+            if (!li && e.target && e.target.closest && e.target.closest('.item-content')) {
+                li = e.target.closest('.numbered-item');
+            }
+            
+            if (!li) return;
+            const parentList = li.parentElement;
+            if (!parentList || !(parentList.matches('ul, ol'))) return;
+
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                this.handleListEnter(li);
+            } else if (e.key === 'Backspace') {
+                this.handleListBackspace(e, li);
+            }
+        };
+        editor.addEventListener('keydown', this.listKeydownHandler);
+        console.log('Initialized list (UL/OL) features with event delegation');
+    }
+
+    handleListEnter(currentLi) {
+        const listEl = currentLi.parentElement; // ul or ol
+        if (!listEl) return;
+
+        // For numbered lists, check the item-content div
+        let isEmpty;
+        if (currentLi.classList.contains('numbered-item')) {
+            const contentDiv = currentLi.querySelector('.item-content');
+            isEmpty = (contentDiv.textContent || '').trim() === '' || (contentDiv.innerHTML || '').trim() === '' || (contentDiv.innerHTML || '').trim() === '<br>';
+        } else {
+            isEmpty = (currentLi.textContent || '').trim() === '' || (currentLi.innerHTML || '').trim() === '' || (currentLi.innerHTML || '').trim() === '<br>';
+        }
+
+        // Special handling for numbered lists - create individual blocks
+        if (listEl.classList.contains('numbered-list')) {
+            if (isEmpty) {
+                // Remove current item and renumber remaining items
+                currentLi.remove();
+                this.renumberListItems(listEl);
+                
+                // If no items left, remove the entire list block
+                if (listEl.children.length === 0) {
+                    const block = listEl.closest('.sprintspace-block');
+                    const para = this.createEmptyParagraphBlock();
+                    block.insertAdjacentElement('afterend', para);
+                    block.remove();
+                    setTimeout(() => para.querySelector('p[contenteditable="true"]').focus(), 0);
+                } else {
+                    // Focus on the next item or create a new paragraph after the list
+                    const next = listEl.children[0];
+                    if (next) {
+                        setTimeout(() => {
+                            const range = document.createRange();
+                            range.selectNodeContents(next);
+                            range.collapse(true);
+                            const sel = window.getSelection();
+                            sel.removeAllRanges();
+                            sel.addRange(range);
+                            next.focus();
+                        }, 0);
+                    } else {
+                        const afterPara = this.createEmptyParagraphBlock();
+                        const listBlock = listEl.closest('.sprintspace-block');
+                        if (listBlock) listBlock.insertAdjacentElement('afterend', afterPara);
+                        setTimeout(() => afterPara.querySelector('p[contenteditable="true"]').focus(), 0);
+                    }
+                }
+                return;
+            } else {
+                // Create new numbered list item
+                this.createNumberedListItem(listEl, currentLi);
+                return;
+            }
+        }
+
+        // Regular list handling (bulleted lists)
+        if (isEmpty) {
+            const block = currentLi.closest('.sprintspace-block');
+            if (block) {
+                // If it is the only LI, remove the list block entirely
+                if (listEl.children.length === 1) {
+                    const para = this.createEmptyParagraphBlock();
+                    block.insertAdjacentElement('afterend', para);
+                    block.remove();
+                    setTimeout(() => para.querySelector('p[contenteditable="true"]').focus(), 0);
+                } else {
+                    // Otherwise remove this LI and place caret in the next LI or create paragraph after list
+                    const next = currentLi.nextElementSibling;
+                    currentLi.remove();
+                    if (next) {
+                        setTimeout(() => {
+                            const range = document.createRange();
+                            range.selectNodeContents(next);
+                            range.collapse(true);
+                            const sel = window.getSelection();
+                            sel.removeAllRanges();
+                            sel.addRange(range);
+                            next.focus();
+                        }, 0);
+                    } else {
+                        const afterPara = this.createEmptyParagraphBlock();
+                        const listBlock = listEl.closest('.sprintspace-block');
+                        if (listBlock) listBlock.insertAdjacentElement('afterend', afterPara);
+                        setTimeout(() => afterPara.querySelector('p[contenteditable="true"]').focus(), 0);
+                    }
+                }
+                return;
+            }
+        }
+
+        // Default behavior: create new list item after current
+        const newLi = document.createElement('li');
+        newLi.setAttribute('contenteditable', 'true');
+        newLi.innerHTML = '';
+        currentLi.insertAdjacentElement('afterend', newLi);
+
+        // Move caret to new li
+        setTimeout(() => {
+            const range = document.createRange();
+            range.selectNodeContents(newLi);
+            range.collapse(true);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+            newLi.focus();
+        }, 0);
+    }
+
+    handleListBackspace(e, currentLi) {
+        const listEl = currentLi.parentElement;
+        if (!listEl) return;
+        
+        // For numbered lists, check the item-content div
+        let isEmpty;
+        if (currentLi.classList.contains('numbered-item')) {
+            const contentDiv = currentLi.querySelector('.item-content');
+            isEmpty = (contentDiv.textContent || '').trim() === '' || (contentDiv.innerHTML || '').trim() === '' || (contentDiv.innerHTML || '').trim() === '<br>';
+        } else {
+            isEmpty = (currentLi.textContent || '').trim() === '' || (currentLi.innerHTML || '').trim() === '' || (currentLi.innerHTML || '').trim() === '<br>';
+        }
+
+        if (!isEmpty) return; // allow normal backspace inside content
+
+        e.preventDefault();
+
+        const prev = currentLi.previousElementSibling;
+        if (prev) {
+            // Remove current and focus previous
+            currentLi.remove();
+            setTimeout(() => {
+                const focusEl = prev;
+                const range = document.createRange();
+                range.selectNodeContents(focusEl);
+                range.collapse(false);
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+                focusEl.focus();
+            }, 0);
+            return;
+        }
+
+        // First item empty: exit list (replace entire list block with paragraph)
+        const block = currentLi.closest('.sprintspace-block');
+        if (block) {
+            const para = this.createEmptyParagraphBlock();
+            block.insertAdjacentElement('afterend', para);
+            block.remove();
+            setTimeout(() => {
+                const p = para.querySelector('p[contenteditable="true"]');
+                if (p) p.focus();
+            }, 0);
+        }
+    }
+
+    createEmptyParagraphBlock() {
+        const para = document.createElement('div');
+        para.className = 'sprintspace-block';
+        para.setAttribute('data-block-type', 'paragraph');
+        para.innerHTML = `
+            <div class="block-menu-wrapper">
+                <button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button>
+            </div>
+            <p contenteditable="true"><br></p>
+        `;
+        return para;
+    }
+
+    createNumberedListItem(listEl, currentLi) {
+        // Get the current item number
+        const currentNumber = parseInt(currentLi.dataset.itemNumber) || 1;
+        const nextNumber = currentNumber + 1;
+        
+        // Create new numbered list item with individual block menu
+        const newLi = document.createElement('li');
+        newLi.className = 'numbered-item';
+        newLi.setAttribute('contenteditable', 'true');
+        newLi.setAttribute('data-item-number', nextNumber);
+        newLi.innerHTML = `
+            <div class="block-menu-wrapper">
+                <button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button>
+            </div>
+            <div class="item-content"></div>
+        `;
+        
+        // Insert after current item
+        currentLi.insertAdjacentElement('afterend', newLi);
+        
+        // Renumber all items
+        this.renumberListItems(listEl);
+        
+        // Focus on new item
+        setTimeout(() => {
+            const range = document.createRange();
+            range.selectNodeContents(newLi.querySelector('.item-content'));
+            range.collapse(true);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+            newLi.focus();
+        }, 0);
+    }
+
+    renumberListItems(listEl) {
+        const items = listEl.querySelectorAll('.numbered-item');
+        items.forEach((item, index) => {
+            const newNumber = index + 1;
+            item.setAttribute('data-item-number', newNumber);
+            // Update the visual number if needed (CSS can handle this with counter-reset)
         });
     }
 }

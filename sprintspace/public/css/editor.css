@@ -2076,7 +2076,7 @@ h6[contenteditable="true"]:focus {
 }
 
 .checklist-list .checklist-item .cl-text:empty::before {
-    content: "To-do";
+    content: attr(data-placeholder);
     color: #8d99a6;
     font-style: normal;
     pointer-events: none;
@@ -2124,6 +2124,67 @@ h6[contenteditable="true"]:focus {
 .sprintspace-editor .checklist-list .checklist-item.completed .cl-text {
     text-decoration: line-through;
     color: #9ca3af;
+}
+
+/* ==================== NUMBERED LIST BLOCK ==================== */
+.numbered-list {
+    counter-reset: item-counter;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.numbered-item {
+    counter-increment: item-counter;
+    display: flex;
+    align-items: flex-start;
+    margin: 4px 0;
+    position: relative;
+}
+
+.numbered-item::before {
+    content: counter(item-counter) ".";
+    margin-right: 8px;
+    min-width: 20px;
+    color: #6b7280;
+    font-weight: 500;
+    flex-shrink: 0;
+}
+
+.numbered-item .block-menu-wrapper {
+    position: absolute;
+    left: -30px;
+    top: 0;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.numbered-item:hover .block-menu-wrapper {
+    opacity: 1;
+}
+
+.numbered-item .item-content {
+    flex: 1;
+    min-height: 1.4em;
+    line-height: 1.6;
+    color: #2e3338;
+    font-size: 14px;
+    outline: none;
+    border: none;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+}
+
+.numbered-item .item-content:focus {
+    outline: none;
+}
+
+.numbered-item .item-content:empty::before {
+    content: "Type something...";
+    color: #8d99a6;
+    font-style: normal;
+    pointer-events: none;
 }
 
 /* ==================== TIMELINE BLOCK ==================== */
