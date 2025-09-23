@@ -2844,16 +2844,43 @@ h6[contenteditable="true"]:focus {
 }
 
 .bullet-item .block-menu-wrapper {
-    position: absolute;
-    left: -32px;
-    top: 2px;
-    opacity: 0;
+    position: absolute !important;
+    left: -32px !important;
+    top: 2px !important;
+    opacity: 1 !important;
+    visibility: visible !important;
     transition: opacity 0.2s ease;
-    z-index: 10;
+    z-index: 10 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 20px !important;
+    height: 20px !important;
 }
 
 .bullet-item:hover .block-menu-wrapper {
     opacity: 1;
+}
+
+.bullet-item .block-menu-btn {
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+    color: #6b7280;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.bullet-item .block-menu-btn:hover {
+    background: #e5e7eb;
+    color: #374151;
+    transform: scale(1.1);
 }
 
 .checklist-item {
@@ -2980,16 +3007,66 @@ h6[contenteditable="true"]:focus {
 }
 
 .numbered-item .block-menu-wrapper {
-    position: absolute;
-    left: -32px;
-    top: 2px;
-    opacity: 0;
+    position: absolute !important;
+    left: -32px !important;
+    top: 2px !important;
+    opacity: 1 !important;
+    visibility: visible !important;
     transition: opacity 0.2s ease;
-    z-index: 10;
+    z-index: 10 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 20px !important;
+    height: 20px !important;
 }
 
 .numbered-item:hover .block-menu-wrapper {
     opacity: 1;
+}
+
+.numbered-item .block-menu-btn {
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+    color: #6b7280;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.numbered-item .block-menu-btn:hover {
+    background: #e5e7eb;
+    color: #374151;
+    transform: scale(1.1);
+}
+
+/* Force visibility for all list item menus */
+.bullet-item .block-menu-wrapper,
+.numbered-item .block-menu-wrapper {
+    opacity: 1 !important;
+    visibility: visible !important;
+    display: flex !important;
+    position: absolute !important;
+    left: -32px !important;
+    top: 2px !important;
+    z-index: 10 !important;
+    width: 20px !important;
+    height: 20px !important;
+}
+
+.bullet-item .block-menu-btn,
+.numbered-item .block-menu-btn {
+    opacity: 1 !important;
+    visibility: visible !important;
+    display: flex !important;
+    width: 20px !important;
+    height: 20px !important;
 }
 
 .numbered-item .item-content {
@@ -4407,6 +4484,29 @@ h3 .mention {
     background: #ffffff;
 }
 
+.timeline-page-title-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+}
+
+.timeline-page-expand {
+    background: none;
+    border: none;
+    color: #6b7280;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.timeline-page-expand:hover {
+    background: #f3f4f6;
+    color: #1f2937;
+}
+
 .timeline-page-title {
     background: transparent;
     border: none;
@@ -4544,7 +4644,31 @@ h3 .mention {
 .tl-actions {
     display: flex;
     align-items: center;
+    gap: 8px;
     margin-left: 12px;
+}
+
+.tl-menu {
+    background: #f3f4f6;
+    color: #6b7280;
+    border: none;
+    border-radius: 4px;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: bold;
+    transition: all 0.2s ease;
+    opacity: 0.8;
+}
+
+.tl-menu:hover {
+    background: #e5e7eb;
+    color: #1f2937;
+    opacity: 1;
 }
 
 .tl-del {
@@ -4568,6 +4692,53 @@ h3 .mention {
     background: #dc2626;
     opacity: 1;
     transform: scale(1.05);
+}
+
+/* Timeline Item Menu */
+.timeline-item-menu {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+    padding: 8px 0;
+    min-width: 120px;
+    z-index: 99999999;
+    user-select: none;
+    pointer-events: auto;
+}
+
+.timeline-item-menu .menu-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    gap: 8px;
+    user-select: none;
+    pointer-events: auto;
+    position: relative;
+}
+
+.timeline-item-menu .menu-item:hover {
+    background: #f8fafc;
+}
+
+.timeline-item-menu .menu-item.danger:hover {
+    background: #fef2f2;
+    color: #dc2626;
+}
+
+.timeline-item-menu .menu-icon {
+    font-size: 14px;
+    width: 16px;
+    text-align: center;
+    pointer-events: none;
+}
+
+.timeline-item-menu .menu-text {
+    font-size: 14px;
+    font-weight: 500;
+    pointer-events: none;
 }
 
 /* Command Menu Styling for Modals */

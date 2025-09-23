@@ -603,13 +603,21 @@ class SprintSpaceWorkspaceApp {
             
             // Convert existing list items to new structure with individual menus
             setTimeout(() => {
+                console.log('=== CONVERTING EXISTING LIST ITEMS ===');
                 this.convertExistingListItems(editorElement);
                 // Force a re-render to ensure CSS is applied
                 this.forceListMenuVisibility();
                 // Run conversion again to catch any missed items
                 setTimeout(() => {
+                    console.log('=== SECOND CONVERSION ATTEMPT ===');
                     this.convertExistingListItems(editorElement);
                     this.forceListMenuVisibility();
+                    // Run conversion a third time
+                    setTimeout(() => {
+                        console.log('=== THIRD CONVERSION ATTEMPT ===');
+                        this.convertExistingListItems(editorElement);
+                        this.forceListMenuVisibility();
+                    }, 300);
                 }, 200);
             }, 100);
             
@@ -1386,7 +1394,7 @@ class SprintSpaceWorkspaceApp {
                 '</div>';
                 break;
             case 'timeline':
-                html = '<div class="sprintspace-block" data-block-type="timeline">' +
+                html =                 '<div class="sprintspace-block" data-block-type="timeline">' +
                     '<div class="block-menu-wrapper">' +
                         '<button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button>' +
                     '</div>' +
@@ -1607,6 +1615,20 @@ class SprintSpaceWorkspaceApp {
                     if (type === 'checklist') {
                         this.ensureChecklistMenus(newElement);
                     }
+                    
+                    // If it's a list, convert list items immediately
+                    if (type === 'list' || type === 'numbered') {
+                        console.log('Converting list items immediately after creation');
+                        this.convertExistingListItems(editor);
+                        this.forceListMenuVisibility();
+                        
+                        // Also run conversion again after a short delay to ensure it works
+                        setTimeout(() => {
+                            console.log('Running delayed list conversion');
+                            this.convertExistingListItems(editor);
+                            this.forceListMenuVisibility();
+                        }, 200);
+                    }
                 }, 10);
                 
                 // Position cursor inside the new element and select the placeholder text
@@ -1714,7 +1736,7 @@ class SprintSpaceWorkspaceApp {
         }
         // Clear insertion lock with a small delay to prevent race conditions
         setTimeout(() => {
-            this._isInsertingBlock = false;
+        this._isInsertingBlock = false;
         }, 100);
     }
 
@@ -2026,22 +2048,18 @@ class SprintSpaceWorkspaceApp {
             li.className = 'tl-list-item';
             li.innerHTML = `
                 <div class="tl-title">${page.title||'Page'}</div>
-                <div class="tl-actions"><button class="tl-del" title="Delete">×</button></div>
+                <div class="tl-actions">
+                    <button class="tl-del" onclick="event.stopPropagation(); window.sprintSpaceApp.deleteTimelinePage('${page.id}')" title="Delete">×</button>
+                </div>
             `;
             list.appendChild(li);
-            li.onclick = (e) => {
-                // Open page modal when clicking on list item (not when selecting text)
-                if (window.getSelection && window.getSelection().toString()) return;
-                this.openTimelinePageModal(block, page, idx);
-            };
-            // Delete action (stop propagation so it won't open the modal)
-            const delBtn = li.querySelector('.tl-del');
-            delBtn.onclick = (e) => {
+            
+            // Make the title clickable to open the page
+            const titleElement = li.querySelector('.tl-title');
+            titleElement.style.cursor = 'pointer';
+            titleElement.onclick = (e) => {
                 e.stopPropagation();
-                if (confirm('Delete this page?')) {
-                    block.timelineData.pages.splice(idx, 1);
-                    this.renderTimeline(block);
-                }
+                this.openTimelinePageModal(block, page, idx);
             };
 
             // Right timeline row
@@ -2106,7 +2124,10 @@ class SprintSpaceWorkspaceApp {
         const html = `
             <div class="timeline-page-modal">
                 <div class="timeline-page-header">
-                    <input type="text" class="timeline-page-title" value="${page.title || ''}" placeholder="Page title">
+                    <div class="timeline-page-title-container">
+                        <button class="timeline-page-expand" onclick="window.sprintSpaceApp.toggleRightModalFullscreen()" title="Expand/Minimize">⛶</button>
+                        <input type="text" class="timeline-page-title" value="${page.title || ''}" placeholder="Page title">
+                    </div>
                     <button class="timeline-page-close" onclick="window.sprintSpaceApp.hideModal()">×</button>
                 </div>
                 
@@ -2216,6 +2237,128 @@ class SprintSpaceWorkspaceApp {
                         }, 2000);
                     }
                     break;
+                }
+            }
+        }
+    }
+
+    showTimelineItemMenu(event, button, pageId) {
+        console.log('showTimelineItemMenu called for pageId:', pageId);
+        
+        // Hide any existing timeline item menu
+        const existingMenu = document.querySelector('.timeline-item-menu');
+        if (existingMenu) {
+            existingMenu.remove();
+        }
+
+        // Create menu
+        const menu = document.createElement('div');
+        menu.className = 'timeline-item-menu';
+        menu.innerHTML = `
+            <div class="menu-item" data-action="edit">
+                <span class="menu-icon">✏️</span>
+                <span class="menu-text">Edit</span>
+            </div>
+            <div class="menu-item" data-action="duplicate">
+                <span class="menu-icon">📋</span>
+                <span class="menu-text">Duplicate</span>
+            </div>
+            <div class="menu-item danger" data-action="delete">
+                <span class="menu-icon">🗑️</span>
+                <span class="menu-text">Delete</span>
+            </div>
+        `;
+
+        // Position menu
+        const rect = button.getBoundingClientRect();
+        menu.style.position = 'fixed';
+        menu.style.top = `${rect.bottom + 5}px`;
+        menu.style.left = `${rect.left - 100}px`;
+        menu.style.zIndex = '99999999';
+
+        // Add to DOM
+        document.body.appendChild(menu);
+
+        // Handle menu item clicks with proper event delegation
+        menu.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const menuItem = e.target.closest('.menu-item');
+            if (menuItem) {
+                const action = menuItem.dataset.action;
+                console.log('Menu item clicked:', action);
+                this.handleTimelineItemAction(action, pageId);
+                menu.remove();
+            }
+        });
+
+        // Hide menu when clicking outside
+        const hideMenu = (e) => {
+            if (!menu.contains(e.target) && !button.contains(e.target)) {
+                menu.remove();
+                document.removeEventListener('click', hideMenu);
+            }
+        };
+        setTimeout(() => document.addEventListener('click', hideMenu), 10);
+    }
+
+    handleTimelineItemAction(action, pageId) {
+        console.log('handleTimelineItemAction called with action:', action, 'pageId:', pageId);
+        
+        const timelineBlocks = document.querySelectorAll('.timeline-block');
+        for (const block of timelineBlocks) {
+            if (block.timelineData && block.timelineData.pages) {
+                const pageIndex = block.timelineData.pages.findIndex(p => p.id === pageId);
+                if (pageIndex !== -1) {
+                    const page = block.timelineData.pages[pageIndex];
+                    console.log('Found page at index:', pageIndex, page);
+                    
+                    switch (action) {
+                        case 'edit':
+                            console.log('Opening edit modal for page:', page);
+                            this.openTimelinePageModal(block, page, pageIndex);
+                            break;
+                        case 'duplicate':
+                            console.log('Duplicating page:', page);
+                            const duplicatedPage = {
+                                ...page,
+                                id: 'page_' + Date.now(),
+                                title: page.title + ' (Copy)'
+                            };
+                            block.timelineData.pages.push(duplicatedPage);
+                            this.renderTimeline(block);
+                            this.autoSavePage();
+                            break;
+                        case 'delete':
+                            console.log('Deleting page:', page);
+                            if (confirm('Delete this page?')) {
+                                block.timelineData.pages.splice(pageIndex, 1);
+                                this.renderTimeline(block);
+                                this.autoSavePage();
+                            }
+                            break;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    deleteTimelinePage(pageId) {
+        console.log('deleteTimelinePage called for pageId:', pageId);
+        
+        if (confirm('Delete this page?')) {
+            const timelineBlocks = document.querySelectorAll('.timeline-block');
+            for (const block of timelineBlocks) {
+                if (block.timelineData && block.timelineData.pages) {
+                    const pageIndex = block.timelineData.pages.findIndex(p => p.id === pageId);
+                    if (pageIndex !== -1) {
+                        block.timelineData.pages.splice(pageIndex, 1);
+                        this.renderTimeline(block);
+                        this.autoSavePage();
+                        break;
+                    }
                 }
             }
         }
@@ -2533,6 +2676,21 @@ class SprintSpaceWorkspaceApp {
         
         // Set up checklist features for modal editor
         this.setupChecklistFeaturesForModal(editor);
+        
+        // Convert existing list items in modal editor
+        setTimeout(() => {
+            console.log('=== CONVERTING LIST ITEMS IN MODAL ===');
+            this.convertExistingListItems(editor);
+            this.forceListMenuVisibility();
+        }, 100);
+        
+        // Also run conversion on input events to catch dynamically created lists
+        editor.addEventListener('input', () => {
+            setTimeout(() => {
+                this.convertExistingListItems(editor);
+                this.forceListMenuVisibility();
+            }, 50);
+        });
     }
 
     getModalCommands(editor) {
@@ -4265,6 +4423,14 @@ class SprintSpaceWorkspaceApp {
     }
     
     showBlockMenu(event, blockElement) {
+        // Check if this is an individual list item
+        if (blockElement.classList.contains('bullet-item') || 
+            blockElement.classList.contains('numbered-item') || 
+            blockElement.classList.contains('checklist-item')) {
+            this.showListItemMenu(event, blockElement);
+            return;
+        }
+        
         // Hide any existing menu
         this.hideBlockMenu();
         
@@ -4665,7 +4831,7 @@ class SprintSpaceWorkspaceApp {
                             <input type="text" id="assignee-search" placeholder="Search users..." onkeyup="window.sprintSpaceApp.filterAssignees(this.value)">
                         </div>
                         <div class="assignee-list" id="assignee-list">
-                            ${users.map(user => `
+                        ${users.map(user => `
                                 <div class="assignee-option ${currentAssignees.includes(user.full_name) ? 'selected' : ''}" 
                                      data-user="${user.full_name}" 
                                      data-email="${user.email}"
@@ -4679,9 +4845,9 @@ class SprintSpaceWorkspaceApp {
                                     <div class="assignee-option-checkbox">
                                         <input type="checkbox" ${currentAssignees.includes(user.full_name) ? 'checked' : ''}>
                                     </div>
-                                </div>
-                            `).join('')}
-                        </div>
+                            </div>
+                        `).join('')}
+                    </div>
                     </div>
                     <div class="assignee-selector-footer">
                         <button class="btn btn-primary" onclick="window.sprintSpaceApp.applyAssignees('${containerId}')">Apply</button>
@@ -5036,10 +5202,14 @@ class SprintSpaceWorkspaceApp {
 
         // Extract timeline block data
         const timelineBlocks = container.querySelectorAll('.timeline-block');
+        console.log('Extracting timeline data from blocks:', timelineBlocks.length);
         timelineBlocks.forEach(block => {
             const parentBlock = block.closest('.sprintspace-block');
             if (parentBlock && block.timelineData) {
+                console.log('Saving timeline data:', block.timelineData);
                 parentBlock.dataset.timelineData = JSON.stringify(block.timelineData);
+            } else {
+                console.log('No timeline data found in block:', block);
             }
         });
     }
@@ -5079,8 +5249,10 @@ class SprintSpaceWorkspaceApp {
 
         // Restore timeline block data
         const timelineBlocks = container.querySelectorAll('.timeline-block');
+        console.log('Found timeline blocks to restore:', timelineBlocks.length);
         timelineBlocks.forEach(block => {
             const parentBlock = block.closest('.sprintspace-block');
+            console.log('Parent block dataset:', parentBlock?.dataset);
             if (parentBlock && parentBlock.dataset.timelineData) {
                 try {
                     block.timelineData = JSON.parse(parentBlock.dataset.timelineData);
@@ -5090,6 +5262,10 @@ class SprintSpaceWorkspaceApp {
                 } catch (error) {
                     console.warn('Failed to parse timeline data:', error);
                 }
+            } else {
+                console.log('No timeline data found for block, initializing empty');
+                block.timelineData = { pages: [] };
+                this.renderTimeline(block);
             }
         });
     }
@@ -6061,6 +6237,169 @@ class SprintSpaceWorkspaceApp {
         this.currentMenuBlock = null;
     }
 
+    showListItemMenu(event, listItem) {
+        // Hide any existing menu
+        this.hideBlockMenu();
+        
+        const menu = document.createElement('div');
+        menu.className = 'block-context-menu';
+        menu.id = 'block-context-menu';
+        
+        menu.innerHTML = `
+            <div class="menu-item" data-action="delete-item">
+                <span class="menu-icon">🗑️</span>
+                <span class="menu-text">Delete item</span>
+            </div>
+            <div class="menu-item" data-action="duplicate-item">
+                <span class="menu-icon">📄</span>
+                <span class="menu-text">Duplicate item</span>
+            </div>
+            <div class="menu-separator"></div>
+            <div class="menu-item" data-action="move-up-item">
+                <span class="menu-icon">⬆️</span>
+                <span class="menu-text">Move up</span>
+            </div>
+            <div class="menu-item" data-action="move-down-item">
+                <span class="menu-icon">⬇️</span>
+                <span class="menu-text">Move down</span>
+            </div>
+        `;
+        
+        // Add event listeners to menu items
+        menu.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const menuItem = e.target.closest('.menu-item');
+            if (!menuItem) return;
+            
+            const action = menuItem.dataset.action;
+            this.handleListItemAction(action, listItem);
+            this.hideBlockMenu();
+        });
+        
+        // Position the menu
+        const rect = listItem.getBoundingClientRect();
+        menu.style.position = 'fixed';
+        menu.style.top = `${rect.top + window.scrollY}px`;
+        menu.style.left = `${rect.right + window.scrollX + 10}px`;
+        menu.style.zIndex = '999999';
+        
+        document.body.appendChild(menu);
+        this.currentMenuBlock = listItem;
+        
+        // Hide menu when clicking outside
+        setTimeout(() => {
+            document.addEventListener('click', (e) => {
+                // Don't hide if clicking on the menu itself
+                if (!menu.contains(e.target)) {
+                    this.hideBlockMenu();
+                }
+            }, { once: true });
+        }, 10);
+    }
+
+    handleListItemAction(action, listItem) {
+        switch (action) {
+            case 'delete-item':
+                this.deleteListItem(listItem);
+                break;
+            case 'duplicate-item':
+                this.duplicateListItem(listItem);
+                break;
+            case 'move-up-item':
+                this.moveListItemUp(listItem);
+                break;
+            case 'move-down-item':
+                this.moveListItemDown(listItem);
+                break;
+        }
+    }
+
+    deleteListItem(listItem) {
+        const list = listItem.parentElement;
+        listItem.remove();
+        
+        // If it's a numbered list, renumber the remaining items
+        if (list.classList.contains('numbered-list')) {
+            this.renumberListItems(list);
+        }
+        
+        // If no items left, remove the entire list block
+        if (list.children.length === 0) {
+            const listBlock = list.closest('.sprintspace-block');
+            if (listBlock) {
+                listBlock.remove();
+            }
+        }
+        
+        this.autoSavePage();
+        this.showToast('Item deleted', 'success');
+    }
+
+    duplicateListItem(listItem) {
+        const list = listItem.parentElement;
+        const newItem = listItem.cloneNode(true);
+        
+        // Clear content and add placeholder
+        const contentElement = newItem.querySelector('.item-content, .cl-text');
+        if (contentElement) {
+            contentElement.textContent = '';
+            contentElement.setAttribute('data-placeholder', 'New item');
+        }
+        
+        // Insert after current item
+        listItem.insertAdjacentElement('afterend', newItem);
+        
+        // If it's a numbered list, renumber all items
+        if (list.classList.contains('numbered-list')) {
+            this.renumberListItems(list);
+        }
+        
+        // Focus on the new item
+        setTimeout(() => {
+            const contentElement = newItem.querySelector('.item-content, .cl-text');
+            if (contentElement) {
+                contentElement.focus();
+            }
+        }, 10);
+        
+        this.autoSavePage();
+        this.showToast('Item duplicated', 'success');
+    }
+
+    moveListItemUp(listItem) {
+        const list = listItem.parentElement;
+        const prevItem = listItem.previousElementSibling;
+        
+        if (prevItem) {
+            list.insertBefore(listItem, prevItem);
+            
+            // If it's a numbered list, renumber all items
+            if (list.classList.contains('numbered-list')) {
+                this.renumberListItems(list);
+            }
+            
+            this.autoSavePage();
+            this.showToast('Item moved up', 'success');
+        }
+    }
+
+    moveListItemDown(listItem) {
+        const list = listItem.parentElement;
+        const nextItem = listItem.nextElementSibling;
+        
+        if (nextItem) {
+            list.insertBefore(nextItem, listItem);
+            
+            // If it's a numbered list, renumber all items
+            if (list.classList.contains('numbered-list')) {
+                this.renumberListItems(list);
+            }
+            
+            this.autoSavePage();
+            this.showToast('Item moved down', 'success');
+        }
+    }
+
     deleteBlock(menuItem) {
         console.log('deleteBlock called with menuItem:', menuItem);
         console.log('currentMenuBlock:', this.currentMenuBlock);
@@ -6802,6 +7141,21 @@ class SprintSpaceWorkspaceApp {
         // Insert after current item
         currentLi.insertAdjacentElement('afterend', newLi);
         
+        // Force the menu to be visible
+        const menuWrapper = newLi.querySelector('.block-menu-wrapper');
+        if (menuWrapper) {
+            menuWrapper.style.opacity = '1';
+            menuWrapper.style.visibility = 'visible';
+            menuWrapper.style.display = 'flex';
+            menuWrapper.style.position = 'absolute';
+            menuWrapper.style.left = '-32px';
+            menuWrapper.style.top = '2px';
+            menuWrapper.style.zIndex = '10';
+            console.log('Numbered item menu made visible');
+        } else {
+            console.error('Numbered item menu not found!');
+        }
+        
         // Renumber all items
         this.renumberListItems(listEl);
         
@@ -6863,6 +7217,21 @@ class SprintSpaceWorkspaceApp {
         // Insert after current item
         currentLi.insertAdjacentElement('afterend', newLi);
         
+        // Force the menu to be visible
+        const menuWrapper = newLi.querySelector('.block-menu-wrapper');
+        if (menuWrapper) {
+            menuWrapper.style.opacity = '1';
+            menuWrapper.style.visibility = 'visible';
+            menuWrapper.style.display = 'flex';
+            menuWrapper.style.position = 'absolute';
+            menuWrapper.style.left = '-32px';
+            menuWrapper.style.top = '2px';
+            menuWrapper.style.zIndex = '10';
+            console.log('Bullet item menu made visible');
+        } else {
+            console.error('Bullet item menu not found!');
+        }
+        
         console.log('List after insertion, children count:', listEl.children.length);
         
         // Focus on new item and ensure menu is visible
@@ -6895,15 +7264,23 @@ class SprintSpaceWorkspaceApp {
     }
 
     convertExistingListItems(editor) {
-        console.log('Converting existing list items...');
+        console.log('=== CONVERTING EXISTING LIST ITEMS ===');
         console.log('Editor HTML before conversion:', editor.innerHTML);
         
-        // First, let's find ALL lists regardless of their current classes
+        // Find ALL lists regardless of their current classes
         const allLists = editor.querySelectorAll('ul, ol');
         console.log('Found all lists:', allLists.length);
         
+        if (allLists.length === 0) {
+            console.log('No lists found to convert');
+            return;
+        }
+        
         allLists.forEach((list, listIndex) => {
-            console.log(`List ${listIndex + 1}:`, list.tagName, 'classes:', list.className);
+            console.log(`\n--- List ${listIndex + 1} ---`);
+            console.log('Tag:', list.tagName);
+            console.log('Classes:', list.className);
+            console.log('HTML:', list.outerHTML);
             
             // Handle checklist lists differently
             if (list.classList.contains('checklist-list')) {
@@ -6911,49 +7288,32 @@ class SprintSpaceWorkspaceApp {
                 const items = list.querySelectorAll('.checklist-item');
                 console.log('Found checklist items:', items.length);
                 items.forEach((item, index) => {
-                    console.log(`Converting checklist item ${index + 1}:`, item.textContent.trim());
-                    
-                    // Clean up any existing menus first
-                    const existingMenus = item.querySelectorAll('.block-menu-wrapper');
-                    existingMenus.forEach(menu => menu.remove());
-                    
-                    // Add a single menu
-                    const menuWrapper = document.createElement('div');
-                    menuWrapper.className = 'block-menu-wrapper';
-                    menuWrapper.innerHTML = '<button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button>';
-                    item.insertBefore(menuWrapper, item.firstChild);
-                    
-                    // Force visibility
-                    menuWrapper.style.setProperty('opacity', '1', 'important');
-                    menuWrapper.style.setProperty('visibility', 'visible', 'important');
-                    menuWrapper.style.setProperty('display', 'flex', 'important');
-                    menuWrapper.style.setProperty('position', 'absolute', 'important');
-                    menuWrapper.style.setProperty('left', '-32px', 'important');
-                    menuWrapper.style.setProperty('top', '50%', 'important');
-                    menuWrapper.style.setProperty('z-index', '10', 'important');
-                    menuWrapper.style.setProperty('transform', 'translateY(-50%)', 'important');
-                    
-                    console.log(`Checklist item ${index + 1} menu added and made visible`);
+                    this.ensureListItemMenu(item, 'checklist-item', index);
                 });
                 return;
             }
             
+            // Determine list type
             const isNumbered = list.tagName === 'OL';
             const itemClass = isNumbered ? 'numbered-item' : 'bullet-item';
             const listClass = isNumbered ? 'numbered-list' : 'bullet-list';
             
-            console.log(`Converting list to ${listClass} with ${list.querySelectorAll('li').length} items`);
+            console.log(`Converting ${isNumbered ? 'numbered' : 'bullet'} list to ${listClass}`);
             
             // Update list class
             list.className = listClass;
             
             // Convert each list item
             const items = list.querySelectorAll('li');
+            console.log(`Found ${items.length} list items to convert`);
+            
             items.forEach((item, index) => {
-                console.log(`Converting item ${index + 1}:`, item.textContent.trim());
+                console.log(`\nConverting item ${index + 1}:`);
+                console.log('Original content:', item.textContent.trim());
+                console.log('Original HTML:', item.outerHTML);
                 
-                // Get the content (preserve any HTML inside)
-                const content = item.innerHTML;
+                // Get the text content
+                const textContent = item.textContent || item.innerText || '';
                 
                 // Update item class and attributes
                 item.className = itemClass;
@@ -6963,13 +7323,6 @@ class SprintSpaceWorkspaceApp {
                     item.setAttribute('data-item-id', Date.now() + index);
                 }
                 
-                // Clean up any existing menus first
-                const existingMenus = item.querySelectorAll('.block-menu-wrapper');
-                existingMenus.forEach(menu => menu.remove());
-                
-                // Extract just the text content, avoiding nested menus
-                const textContent = item.textContent || item.innerText || '';
-                
                 // Replace content with new structure
                 item.innerHTML = `
                     <div class="block-menu-wrapper">
@@ -6978,12 +7331,106 @@ class SprintSpaceWorkspaceApp {
                     <div class="item-content">${textContent}</div>
                 `;
                 
-                console.log(`Item ${index + 1} converted successfully`);
+                console.log('New HTML:', item.outerHTML);
+                
+                // Ensure menu is visible
+                this.ensureListItemMenu(item, itemClass, index);
             });
         });
         
-        console.log('List conversion complete');
+        console.log('\n=== CONVERSION COMPLETE ===');
         console.log('Editor HTML after conversion:', editor.innerHTML);
+        
+        // Final verification
+        this.verifyListMenus(editor);
+    }
+
+    ensureListItemMenu(item, itemClass, index) {
+        console.log(`Ensuring menu for ${itemClass} item ${index + 1}`);
+        
+        // Clean up any existing menus first
+        const existingMenus = item.querySelectorAll('.block-menu-wrapper');
+        existingMenus.forEach(menu => menu.remove());
+        
+        // Add menu if it doesn't exist
+        let menuWrapper = item.querySelector('.block-menu-wrapper');
+        if (!menuWrapper) {
+            menuWrapper = document.createElement('div');
+            menuWrapper.className = 'block-menu-wrapper';
+            menuWrapper.innerHTML = '<button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button>';
+            item.insertBefore(menuWrapper, item.firstChild);
+        }
+        
+        // Force visibility with aggressive styling
+        menuWrapper.style.cssText = `
+            position: absolute !important;
+            left: -32px !important;
+            top: 2px !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 20px !important;
+            height: 20px !important;
+            z-index: 10 !important;
+            background: rgba(255, 0, 0, 0.1) !important;
+        `;
+        
+        // Also style the button
+        const button = menuWrapper.querySelector('.block-menu-btn');
+        if (button) {
+            button.style.cssText = `
+                width: 20px !important;
+                height: 20px !important;
+                border: none !important;
+                background: transparent !important;
+                cursor: pointer !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                border-radius: 3px !important;
+                color: #6b7280 !important;
+                font-size: 14px !important;
+                opacity: 1 !important;
+                visibility: visible !important;
+            `;
+        }
+        
+        console.log(`Menu ensured for ${itemClass} item ${index + 1}`);
+    }
+
+    verifyListMenus(editor) {
+        console.log('\n=== VERIFYING LIST MENUS ===');
+        const allListItems = editor.querySelectorAll('.bullet-item, .numbered-item, .checklist-item');
+        console.log(`Found ${allListItems.length} list items to verify`);
+        
+        allListItems.forEach((item, index) => {
+            const menu = item.querySelector('.block-menu-wrapper');
+            const button = menu?.querySelector('.block-menu-btn');
+            
+            console.log(`\nItem ${index + 1}:`);
+            console.log('- Has menu wrapper:', !!menu);
+            console.log('- Has menu button:', !!button);
+            console.log('- Menu visible:', menu ? window.getComputedStyle(menu).opacity : 'N/A');
+            console.log('- Menu display:', menu ? window.getComputedStyle(menu).display : 'N/A');
+            console.log('- Menu position:', menu ? window.getComputedStyle(menu).position : 'N/A');
+            
+            if (menu) {
+                const rect = menu.getBoundingClientRect();
+                console.log('- Menu rect:', rect);
+            }
+        });
+    }
+
+    // Method to manually force list conversion (for debugging)
+    forceListConversion() {
+        console.log('=== MANUAL LIST CONVERSION ===');
+        const editor = document.getElementById('sprintspace-editor');
+        if (editor) {
+            this.convertExistingListItems(editor);
+            this.forceListMenuVisibility();
+        }
     }
 
     forceListMenuVisibility() {
@@ -7745,3 +8192,47 @@ class SprintSpaceWorkspaceApp {
 
 // Export for global access
 window.SprintSpaceWorkspaceApp = SprintSpaceWorkspaceApp;
+
+// Make debugging methods available globally
+window.forceListConversion = () => {
+    if (window.sprintSpaceApp) {
+        window.sprintSpaceApp.forceListConversion();
+    } else {
+        console.error('SprintSpace app not initialized');
+    }
+};
+
+window.testListCreation = () => {
+    if (window.sprintSpaceApp) {
+        const editor = document.getElementById('sprintspace-editor');
+        if (editor) {
+            // Create a test bullet list
+            const testList = document.createElement('ul');
+            testList.className = 'bullet-list';
+            testList.innerHTML = `
+                <li class="bullet-item" data-item-id="test1">
+                    <div class="block-menu-wrapper">
+                        <button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button>
+                    </div>
+                    <div class="item-content">Test bullet item 1</div>
+                </li>
+                <li class="bullet-item" data-item-id="test2">
+                    <div class="block-menu-wrapper">
+                        <button class="block-menu-btn" onclick="event.stopPropagation(); window.sprintSpaceApp.showBlockMenu(event, this.parentElement.parentElement)">⋮</button>
+                    </div>
+                    <div class="item-content">Test bullet item 2</div>
+                </li>
+            `;
+            
+            // Add to editor
+            editor.appendChild(testList);
+            
+            // Force menu visibility
+            window.sprintSpaceApp.forceListMenuVisibility();
+            
+            console.log('Test list created and added to editor');
+        }
+    } else {
+        console.error('SprintSpace app not initialized');
+    }
+};
