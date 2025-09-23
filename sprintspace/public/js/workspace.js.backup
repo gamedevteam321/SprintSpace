@@ -595,9 +595,6 @@ class SprintSpaceWorkspaceApp {
             editorElement.contentEditable = true;
             console.log('Editor content set, contentEditable:', editorElement.contentEditable);
             
-            // Restore calendar and gallery data from data attributes
-            this.restoreBlockData(editorElement);
-            
             // Fix private file URLs in existing content
             this.fixPrivateFileUrls(editorElement);
             
@@ -1146,44 +1143,44 @@ class SprintSpaceWorkspaceApp {
         }
         this._isInsertingBlock = true;
         
-        // Ensure we're working with a valid editor
-        if (!editor || (!editor.classList.contains('sprintspace-editor') && !editor.classList.contains('gallery-page-editor') && !editor.classList.contains('calendar-page-editor') && !editor.classList.contains('timeline-page-editor'))) {
-            console.error('Invalid editor element');
-            this._isInsertingBlock = false;
-            return;
-        }
-        
-        const selection = window.getSelection();
-        if (selection.rangeCount === 0) {
-            console.log('No selection found, focusing editor and trying again');
-            editor.focus();
-            // Try to create a selection at the end of the editor content
-            const range = document.createRange();
-            range.selectNodeContents(editor);
-            range.collapse(false);
-            selection.removeAllRanges();
-            selection.addRange(range);
-        }
+        try {
+            // Ensure we're working with a valid editor
+            if (!editor || (!editor.classList.contains('sprintspace-editor') && !editor.classList.contains('gallery-page-editor') && !editor.classList.contains('calendar-page-editor'))) {
+                console.error('Invalid editor element');
+                return;
+            }
+            
+            const selection = window.getSelection();
+            if (selection.rangeCount === 0) {
+                console.log('No selection found, focusing editor and trying again');
+                editor.focus();
+                // Try to create a selection at the end of the editor content
+                const range = document.createRange();
+                range.selectNodeContents(editor);
+                range.collapse(false);
+                selection.removeAllRanges();
+                selection.addRange(range);
+            }
 
-        let range = selection.getRangeAt(0);
-        console.log('Current range:', range);
-        console.log('Range container:', range.startContainer);
-        
-        // Ensure the range is within the editor
-        if (!editor.contains(range.startContainer)) {
-            console.log('Range not in editor, repositioning');
-            const newRange = document.createRange();
-            newRange.selectNodeContents(editor);
-            newRange.collapse(false);
-            selection.removeAllRanges();
-            selection.addRange(newRange);
-            range = newRange; // Update our range reference
-        }
-        
-        // Remove the slash command using stored position information
-        let slashRemoved = false;
-        
-        if (this.workspaceEditorState.slashPosition) {
+            let range = selection.getRangeAt(0);
+            console.log('Current range:', range);
+            console.log('Range container:', range.startContainer);
+            
+            // Ensure the range is within the editor
+            if (!editor.contains(range.startContainer)) {
+                console.log('Range not in editor, repositioning');
+                const newRange = document.createRange();
+                newRange.selectNodeContents(editor);
+                newRange.collapse(false);
+                selection.removeAllRanges();
+                selection.addRange(newRange);
+                range = newRange; // Update our range reference
+            }
+            
+            // Remove the slash command using stored position information
+            let slashRemoved = false;
+            
+            if (this.workspaceEditorState.slashPosition) {
             const slashPos = this.workspaceEditorState.slashPosition;
             const textNode = slashPos.textNode;
             
@@ -1393,7 +1390,7 @@ class SprintSpaceWorkspaceApp {
                     '<div class="timeline-block" contenteditable="false" data-range-days="14">' +
                         '<div class="timeline-toolbar">' +
                             '<div class="tl-toolbar-left">' +
-                                '<button class="btn btn-sm add-timeline-page">+ Add page</button>' +
+                                '<button class="btn btn-sm add-timeline-task">+ Add task</button>' +
                             '</div>' +
                             '<div class="tl-toolbar-right">' +
                                 '<select class="timeline-range">' +
@@ -1711,11 +1708,10 @@ class SprintSpaceWorkspaceApp {
                     this.ensureEditableSpaceAfterBlock(editor, type);
                 }, 100);
             }
-        }
-        // Clear insertion lock with a small delay to prevent race conditions
-        setTimeout(() => {
+        } finally {
+            // Clear insertion lock
             this._isInsertingBlock = false;
-        }, 100);
+        }
     }
 
     ensureEditableSpaceAfterBlock(editor, blockType) {
@@ -1959,19 +1955,16 @@ class SprintSpaceWorkspaceApp {
             this.renderTimeline(block);
         };
 
-        // Add page handler
-        const addBtn = block.querySelector('.add-timeline-page');
-        addBtn.onclick = () => this.addTimelinePage(block);
+        // Add task handler
+        const addBtn = block.querySelector('.add-timeline-task');
+        addBtn.onclick = () => this.addTimelineTask(block);
 
         // Initial render
-        if (!block.timelineData) block.timelineData = { pages: [] };
+        if (!block.timelineData) block.timelineData = { tasks: [] };
         this.renderTimeline(block);
     }
 
     renderTimeline(block) {
-        console.log('renderTimeline called with block:', block);
-        console.log('timelineData:', block.timelineData);
-        
         const days = parseInt(block.dataset.rangeDays || '14', 10);
         const start = new Date();
         const header = block.querySelector('.timeline-header');
@@ -2020,26 +2013,26 @@ class SprintSpaceWorkspaceApp {
             monthsEl.appendChild(seg);
         }
 
-        (block.timelineData.pages || []).forEach((page, idx) => {
+        (block.timelineData.tasks || []).forEach((t, idx) => {
             // Left list item
             const li = document.createElement('div');
             li.className = 'tl-list-item';
             li.innerHTML = `
-                <div class="tl-title">${page.title||'Page'}</div>
-                <div class="tl-actions"><button class="tl-del" title="Delete">×</button></div>
+                <div class="tl-title">${t.title||'Task'}</div>
+                <div class="tl-actions"><button class="tl-del" title="Delete">🗑️</button></div>
             `;
             list.appendChild(li);
             li.onclick = (e) => {
-                // Open page modal when clicking on list item (not when selecting text)
+                // Open details drawer when clicking on list item (not when selecting text)
                 if (window.getSelection && window.getSelection().toString()) return;
-                this.openTimelinePageModal(block, page, idx);
+                this.openTimelineTaskPanel(block, t, idx);
             };
-            // Delete action (stop propagation so it won't open the modal)
+            // Delete action (stop propagation so it won't open the drawer)
             const delBtn = li.querySelector('.tl-del');
             delBtn.onclick = (e) => {
                 e.stopPropagation();
-                if (confirm('Delete this page?')) {
-                    block.timelineData.pages.splice(idx, 1);
+                if (confirm('Delete this task?')) {
+                    block.timelineData.tasks.splice(idx, 1);
                     this.renderTimeline(block);
                 }
             };
@@ -2052,8 +2045,8 @@ class SprintSpaceWorkspaceApp {
 
             // Render bar if dates are set
             const track = row.querySelector('.tl-track');
-            const s = page.startDate ? new Date(page.startDate) : null;
-            const e = page.endDate ? new Date(page.endDate) : null;
+            const s = t.start ? new Date(t.start) : null;
+            const e = t.due ? new Date(t.due) : null;
             if (s && e && e >= s) {
                 const day0 = new Date(start); day0.setHours(0,0,0,0);
                 const left = Math.max(0, Math.round((s - day0) / 86400000));
@@ -2080,145 +2073,14 @@ class SprintSpaceWorkspaceApp {
         }
     }
 
-    addTimelinePage(block) {
-        console.log('addTimelinePage called with block:', block);
-        block.timelineData = block.timelineData || { pages: [] };
-        const page = { 
-            id: 'page_' + Date.now(),
-            title: 'New Page',
-            content: '',
-            startDate: new Date().toISOString().split('T')[0],
-            endDate: new Date().toISOString().split('T')[0],
-            allDay: true,
-            assignees: []
-        };
-        block.timelineData.pages.push(page);
-        console.log('Added page to timelineData:', block.timelineData);
+    addTimelineTask(block) {
+        block.timelineData = block.timelineData || { tasks: [] };
+        const task = { title: 'New Task' };
+        block.timelineData.tasks.push(task);
         this.renderTimeline(block);
-        // Open modal immediately to fill details with a small delay to ensure rendering is complete
-        const idx = block.timelineData.pages.length - 1;
-        setTimeout(() => {
-            this.openTimelinePageModal(block, page, idx);
-        }, 100);
-    }
-
-    openTimelinePageModal(block, page, pageIndex) {
-        const html = `
-            <div class="timeline-page-modal">
-                <div class="timeline-page-header">
-                    <input type="text" class="timeline-page-title" value="${page.title || ''}" placeholder="Page title">
-                    <button class="timeline-page-close" onclick="window.sprintSpaceApp.hideModal()">×</button>
-                </div>
-                
-                <div class="timeline-page-assignees">
-                    <div class="assignees-label">Assignees</div>
-                    <div class="assignees-container" id="timeline-assignees-${page.id}">
-                        ${(page.assignees || []).map(assignee => `
-                            <div class="assignee-tag" data-user="${assignee}">
-                                <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(assignee)}&size=24&background=667eea&color=fff" alt="${assignee}" class="assignee-avatar">
-                                <span class="assignee-name">${assignee}</span>
-                                <button class="remove-assignee" onclick="this.parentElement.remove()" title="Remove assignee">×</button>
-                            </div>
-                        `).join('')}
-                        <button class="btn-add-assignee" onclick="window.sprintSpaceApp.showAssigneeSelector('timeline-assignees-${page.id}')">+ Add assignee</button>
-                    </div>
-                </div>
-
-                <div class="timeline-page-metadata">
-                    <div class="timeline-page-field">
-                        <label>Start Date</label>
-                        <input type="date" class="timeline-page-start-date" value="${page.startDate || ''}">
-                    </div>
-                    <div class="timeline-page-field">
-                        <label>End Date</label>
-                        <input type="date" class="timeline-page-end-date" value="${page.endDate || ''}">
-                    </div>
-                    <div class="timeline-page-field">
-                        <label>
-                            <input type="checkbox" class="timeline-page-all-day" ${page.allDay ? 'checked' : ''}>
-                            All Day
-                        </label>
-                    </div>
-                </div>
-
-                <div class="timeline-page-content">
-                    <div class="timeline-page-editor-container">
-                        <div class="timeline-page-editor" contenteditable="true" data-page-id="${page.id}" placeholder="Press Enter to continue with an empty page, or create a template">${page.content || ''}</div>
-                        <div class="timeline-page-command-menu"></div>
-                    </div>
-                </div>
-
-                <div class="timeline-page-footer">
-                    <button class="btn btn-secondary" onclick="window.sprintSpaceApp.hideModal()">Cancel</button>
-                    <button class="btn btn-primary" onclick="window.sprintSpaceApp.saveTimelinePage('${page.id}')">Save</button>
-                </div>
-            </div>
-        `;
-
-        this.showRightSideModal('Timeline Page', html, { width: '40%' });
-        this.setupTimelinePageEditor(page.id);
-    }
-
-    setupTimelinePageEditor(pageId) {
-        const editor = document.querySelector(`[data-page-id="${pageId}"]`);
-        const commandMenu = document.querySelector('.timeline-page-command-menu');
-        
-        if (!editor || !commandMenu) return;
-
-        // Use the same setup as gallery and calendar modals
-        this.setupPageEditorForModal(editor, commandMenu);
-
-        // Setup auto-save
-        this.setupModalAutoSave(editor, () => this.saveTimelinePage(pageId));
-    }
-
-    saveTimelinePage(pageId) {
-        const modal = document.querySelector('.right-modal');
-        if (!modal) return;
-
-        const title = modal.querySelector('.timeline-page-title').value;
-        const content = modal.querySelector('.timeline-page-editor').innerHTML;
-        const startDate = modal.querySelector('.timeline-page-start-date').value;
-        const endDate = modal.querySelector('.timeline-page-end-date').value;
-        const allDay = modal.querySelector('.timeline-page-all-day').checked;
-
-        // Get assignees
-        const assigneesContainer = modal.querySelector(`#timeline-assignees-${pageId}`);
-        const assignees = Array.from(assigneesContainer.querySelectorAll('.assignee-tag')).map(tag => tag.dataset.user);
-
-        // Find the timeline block and update the page
-        const timelineBlocks = document.querySelectorAll('.timeline-block');
-        for (const block of timelineBlocks) {
-            if (block.timelineData && block.timelineData.pages) {
-                const pageIndex = block.timelineData.pages.findIndex(p => p.id === pageId);
-                if (pageIndex !== -1) {
-                    block.timelineData.pages[pageIndex] = {
-                        ...block.timelineData.pages[pageIndex],
-                        title,
-                        content,
-                        startDate,
-                        endDate,
-                        allDay,
-                        assignees
-                    };
-                    this.renderTimeline(block);
-                    this.autoSavePage();
-                    
-                    // Show success message
-                    const saveBtn = modal.querySelector('.btn-primary');
-                    if (saveBtn) {
-                        const originalText = saveBtn.textContent;
-                        saveBtn.textContent = '✓ Saved';
-                        saveBtn.style.background = '#10b981';
-                        setTimeout(() => {
-                            saveBtn.textContent = originalText;
-                            saveBtn.style.background = '';
-                        }, 2000);
-                    }
-                    break;
-                }
-            }
-        }
+        // Open panel immediately to fill details
+        const idx = block.timelineData.tasks.length - 1;
+        this.openTimelineTaskPanel(block, task, idx);
     }
 
     // ---------- Timeline Drawer ----------
@@ -2418,24 +2280,13 @@ class SprintSpaceWorkspaceApp {
     openGalleryPageModal(block, page) {
         const html = `
             <div class="gallery-page-modal">
-                <div class="gallery-page-metadata">
-                    <div class="gallery-page-title-section">
+                <div class="gallery-page-header">
+                    <div class="gallery-page-header-left">
+                        <button class="gallery-page-expand" onclick="window.sprintSpaceApp.toggleGalleryPageFullscreen()" title="Fullscreen">⛶</button>
                         <input type="text" class="gallery-page-title" value="${page.title}" placeholder="Page title">
                     </div>
-                    <div class="gallery-page-assignees">
-                        <label class="assignees-label">Assignees:</label>
-                        <div class="assignees-container" id="gallery-assignees-${page.id}">
-                            ${(page.assignees || []).map(assignee => `
-                                <span class="assignee-tag" data-user="${assignee}">
-                                    <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(assignee)}&size=20&background=667eea&color=fff" alt="${assignee}" class="assignee-avatar">
-                                    <span class="assignee-name">${assignee}</span>
-                                    <button class="assignee-remove" onclick="window.sprintSpaceApp.removeAssignee('gallery-assignees-${page.id}', '${assignee}')">×</button>
-                                </span>
-                            `).join('')}
-                        </div>
-                        <button class="btn-add-assignee" onclick="window.sprintSpaceApp.showAssigneeSelector('gallery-assignees-${page.id}')">
-                            + Add assignee
-                        </button>
+                    <div class="gallery-page-header-right">
+                        <button class="gallery-page-close" onclick="window.sprintSpaceApp.closeGalleryPageModal()" title="Close">✕</button>
                     </div>
                 </div>
                 <div class="gallery-page-content">
@@ -2451,7 +2302,7 @@ class SprintSpaceWorkspaceApp {
             </div>
         `;
         
-        this.showRightSideModal('Gallery Page', html);
+        this.showModalHTML('Gallery Page', html, { width: '90%', maxWidth: '1400px' });
         
         // Initialize the editor with full SprintSpace functionality
         this.initializeGalleryPageEditor(page);
@@ -2467,12 +2318,10 @@ class SprintSpaceWorkspaceApp {
     saveGalleryPage(pageId) {
         const titleInput = document.querySelector('.gallery-page-title');
         const contentEditor = document.querySelector('.gallery-page-editor');
-        const assigneesContainer = document.querySelector(`#gallery-assignees-${pageId}`);
         
         if (titleInput && contentEditor) {
             const title = titleInput.value || 'Untitled';
             const content = contentEditor.innerHTML;
-            const assignees = assigneesContainer ? Array.from(assigneesContainer.querySelectorAll('.assignee-tag')).map(tag => tag.dataset.user) : [];
             
             // Find the gallery block and update the page data
             const block = document.querySelector('.gallery-block');
@@ -2481,18 +2330,12 @@ class SprintSpaceWorkspaceApp {
                 if (page) {
                     page.title = title;
                     page.content = content;
-                    page.assignees = assignees;
                     page.updatedAt = new Date().toLocaleDateString();
                     
                     // Re-render the gallery to show updated content
                     this.renderGallery(block);
                 }
             }
-            
-            // Trigger auto-save to persist the changes
-            setTimeout(() => {
-                this.autoSavePage();
-            }, 100);
             
             // Show success message
             frappe.show_alert({
@@ -2530,9 +2373,6 @@ class SprintSpaceWorkspaceApp {
         
         // Use the same slash command system as the main editor
         this.setupSlashCommands(editor, commandMenu, this.getModalCommands(editor));
-        
-        // Set up checklist features for modal editor
-        this.setupChecklistFeaturesForModal(editor);
     }
 
     getModalCommands(editor) {
@@ -2673,29 +2513,6 @@ class SprintSpaceWorkspaceApp {
         this.insertBlock(editor, blockType, '', level);
     }
 
-    setupChecklistFeaturesForModal(editor) {
-        // Set up checklist keydown handler for modal editor
-        editor.removeEventListener('keydown', this.modalChecklistKeydownHandler);
-        this.modalChecklistKeydownHandler = (e) => {
-            if (e.key === 'Enter' && e.target.matches('.checklist-list .cl-text[contenteditable="true"]')) {
-                this.handleChecklistKeydown(e, e.target);
-            }
-            if (e.key === 'Backspace' && e.target.matches('.checklist-list .cl-text[contenteditable="true"]')) {
-                const wrapper = e.target.closest('.checklist-item');
-                const isEmpty = e.target.textContent.trim() === '' || e.target.textContent.trim() === 'To-do' || e.target.textContent.trim() === 'Add a to-do item';
-                if (wrapper && isEmpty) {
-                    // Remove empty item on backspace to behave like Notion
-                    e.preventDefault();
-                    const list = wrapper.parentElement;
-                    const prev = wrapper.previousElementSibling?.querySelector('.cl-text[contenteditable="true"]');
-                    wrapper.remove();
-                    if (prev) prev.focus();
-                }
-            }
-        };
-        editor.addEventListener('keydown', this.modalChecklistKeydownHandler);
-    }
-
     setupModalAutoSave(editor, page) {
         // Auto-save every 2 seconds
         setInterval(() => {
@@ -2754,9 +2571,6 @@ class SprintSpaceWorkspaceApp {
         const daysEl = block.querySelector('.calendar-days');
         
         if (!monthYearEl || !daysEl) return;
-        
-        // Debug: Log all pages in calendar data
-        console.log('Calendar data pages:', block.calendarData?.pages || []);
 
         const currentDate = block.calendarData.currentDate;
         const year = currentDate.getFullYear();
@@ -2789,71 +2603,15 @@ class SprintSpaceWorkspaceApp {
             dayEl.className = 'calendar-day';
             dayEl.textContent = day;
             
-            // Check if there are pages for this date (including pages that span across this date)
+            // Check if there are pages for this date
             const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-            const currentDate = new Date(dateStr);
-            
-            // Find pages that are active on this date
-            const pagesForDate = block.calendarData.pages.filter(page => {
-                // Normalize dates to YYYY-MM-DD format for comparison
-                const pageStartDate = page.startDate || page.date;
-                const pageEndDate = page.endDate || pageStartDate;
-                
-                if (!pageStartDate) return false;
-                
-                // Convert to date strings for comparison (YYYY-MM-DD)
-                const startDateStr = new Date(pageStartDate).toISOString().split('T')[0];
-                const endDateStr = new Date(pageEndDate).toISOString().split('T')[0];
-                const currentDateStr = currentDate.toISOString().split('T')[0];
-                
-                // Check if current date falls within the page's date range
-                return currentDateStr >= startDateStr && currentDateStr <= endDateStr;
-            });
-            
-            // Debug logging
-            if (pagesForDate.length > 0) {
-                console.log(`Found ${pagesForDate.length} pages for ${dateStr}:`, pagesForDate.map(p => ({
-                    title: p.title,
-                    startDate: p.startDate,
-                    endDate: p.endDate,
-                    date: p.date
-                })));
-            }
+            const pagesForDate = block.calendarData.pages.filter(p => p.date === dateStr);
             
             if (pagesForDate.length > 0) {
                 dayEl.classList.add('has-pages');
-                
-                // Define colors for different pages
-                const pageColors = [
-                    '#3b82f6', // Blue
-                    '#10b981', // Green
-                    '#f59e0b', // Yellow
-                    '#ef4444', // Red
-                    '#8b5cf6', // Purple
-                    '#06b6d4', // Cyan
-                    '#f97316', // Orange
-                    '#84cc16'  // Lime
-                ];
-                
-                // Create page indicators with different colors
-                const pageIndicators = pagesForDate.map((page, index) => {
-                    const color = pageColors[index % pageColors.length];
-                    const truncatedTitle = page.title.length > 12 ? page.title.substring(0, 12) + '...' : page.title;
-                    return `
-                        <div class="day-page-indicator" 
-                             style="background-color: ${color};" 
-                             title="${page.title}"
-                             onclick="event.stopPropagation(); window.sprintSpaceApp.editCalendarPage('${page.id}')">
-                            ${truncatedTitle}
-                        </div>
-                    `;
-                }).join('');
-                
                 dayEl.innerHTML = `
                     <span class="day-number">${day}</span>
-                    <div class="day-pages-container">
-                        ${pageIndicators}
-                    </div>
+                    <div class="day-pages">${pagesForDate.length} page${pagesForDate.length > 1 ? 's' : ''}</div>
                 `;
             }
             
@@ -2888,25 +2646,7 @@ class SprintSpaceWorkspaceApp {
     }
 
     openCalendarDay(block, dateStr) {
-        const currentDate = new Date(dateStr);
-        
-        // Find pages that are active on this date (including pages that span across this date)
-        const pagesForDate = block.calendarData.pages.filter(page => {
-            // Normalize dates to YYYY-MM-DD format for comparison
-            const pageStartDate = page.startDate || page.date;
-            const pageEndDate = page.endDate || pageStartDate;
-            
-            if (!pageStartDate) return false;
-            
-            // Convert to date strings for comparison (YYYY-MM-DD)
-            const startDateStr = new Date(pageStartDate).toISOString().split('T')[0];
-            const endDateStr = new Date(pageEndDate).toISOString().split('T')[0];
-            const currentDateStr = currentDate.toISOString().split('T')[0];
-            
-            // Check if current date falls within the page's date range
-            return currentDateStr >= startDateStr && currentDateStr <= endDateStr;
-        });
-        
+        const pagesForDate = block.calendarData.pages.filter(p => p.date === dateStr);
         const date = new Date(dateStr);
         const dateDisplay = date.toLocaleDateString();
         
@@ -2919,32 +2659,15 @@ class SprintSpaceWorkspaceApp {
                 <div class="calendar-day-pages">
                     ${pagesForDate.length === 0 ? 
                         '<div class="calendar-day-empty">No pages for this date. Click "Add Page" to create one.</div>' :
-                        pagesForDate.map((page, index) => {
-                            const pageColors = [
-                                '#3b82f6', '#10b981', '#f59e0b', '#ef4444', 
-                                '#8b5cf6', '#06b6d4', '#f97316', '#84cc16'
-                            ];
-                            const color = pageColors[index % pageColors.length];
-                            const startDate = page.startDate || page.date;
-                            const endDate = page.endDate || startDate;
-                            const dateRange = startDate === endDate ? 
-                                new Date(startDate).toLocaleDateString() : 
-                                `${new Date(startDate).toLocaleDateString()} - ${new Date(endDate).toLocaleDateString()}`;
-                            
-                            return `
-                                <div class="calendar-day-page" data-page-id="${page.id}">
-                                    <div class="calendar-page-color-indicator" style="background-color: ${color};"></div>
-                                    <div class="calendar-page-content">
-                                        <div class="calendar-page-title">${page.title}</div>
-                                        <div class="calendar-page-dates">${dateRange}</div>
-                                    </div>
-                                    <div class="calendar-page-actions">
-                                        <button onclick="window.sprintSpaceApp.editCalendarPage('${page.id}')" title="Edit">✏️</button>
-                                        <button onclick="window.sprintSpaceApp.deleteCalendarPage('${page.id}')" title="Delete">🗑️</button>
-                                    </div>
+                        pagesForDate.map(page => `
+                            <div class="calendar-day-page" data-page-id="${page.id}">
+                                <div class="calendar-page-title">${page.title}</div>
+                                <div class="calendar-page-actions">
+                                    <button onclick="window.sprintSpaceApp.editCalendarPage('${page.id}')">✏️</button>
+                                    <button onclick="window.sprintSpaceApp.deleteCalendarPage('${page.id}')">🗑️</button>
                                 </div>
-                            `;
-                        }).join('')
+                            </div>
+                        `).join('')
                     }
                 </div>
             </div>
@@ -2960,9 +2683,6 @@ class SprintSpaceWorkspaceApp {
             title: 'New Page',
             content: '',
             date: dateStr,
-            startDate: dateStr,
-            endDate: '',
-            allDay: true,
             createdAt: new Date().toLocaleDateString()
         };
 
@@ -2982,38 +2702,13 @@ class SprintSpaceWorkspaceApp {
         if (page) {
             const html = `
                 <div class="calendar-page-modal">
-                    <div class="calendar-page-metadata">
-                        <div class="calendar-page-title-section">
+                    <div class="calendar-page-header">
+                        <div class="calendar-page-header-left">
+                            <button class="calendar-page-expand" onclick="window.sprintSpaceApp.toggleCalendarPageFullscreen()" title="Fullscreen">⛶</button>
                             <input type="text" class="calendar-page-title" value="${page.title}" placeholder="Page title">
                         </div>
-                        <div class="calendar-page-assignees">
-                            <label class="assignees-label">Assignees:</label>
-                            <div class="assignees-container" id="calendar-assignees-${page.id}">
-                                ${(page.assignees || []).map(assignee => `
-                                    <span class="assignee-tag" data-user="${assignee}">
-                                        <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(assignee)}&size=20&background=667eea&color=fff" alt="${assignee}" class="assignee-avatar">
-                                        <span class="assignee-name">${assignee}</span>
-                                        <button class="assignee-remove" onclick="window.sprintSpaceApp.removeAssignee('calendar-assignees-${page.id}', '${assignee}')">×</button>
-                                    </span>
-                                `).join('')}
-                            </div>
-                            <button class="btn-add-assignee" onclick="window.sprintSpaceApp.showAssigneeSelector('calendar-assignees-${page.id}')">
-                                + Add assignee
-                            </button>
-                        </div>
-                        <div class="calendar-page-dates">
-                            <div class="calendar-date-field">
-                                <label>Start Date:</label>
-                                <input type="date" class="calendar-page-start-date" value="${page.startDate || page.date || ''}">
-                            </div>
-                            <div class="calendar-date-field">
-                                <label>End Date:</label>
-                                <input type="date" class="calendar-page-end-date" value="${page.endDate || ''}">
-                            </div>
-                            <div class="calendar-date-field">
-                                <label>All Day:</label>
-                                <input type="checkbox" class="calendar-page-all-day" ${page.allDay ? 'checked' : ''}>
-                            </div>
+                        <div class="calendar-page-header-right">
+                            <button class="calendar-page-close" onclick="window.sprintSpaceApp.closeCalendarPageModal()" title="Close">✕</button>
                         </div>
                     </div>
                     <div class="calendar-page-content">
@@ -3029,7 +2724,7 @@ class SprintSpaceWorkspaceApp {
                 </div>
             `;
             
-            this.showRightSideModal('Calendar Page', html);
+            this.showModalHTML('Calendar Page', html, { width: '90%', maxWidth: '1400px' });
             
             // Initialize the editor with full SprintSpace functionality
             this.initializeCalendarPageEditor(page);
@@ -3057,18 +2752,10 @@ class SprintSpaceWorkspaceApp {
     saveCalendarPage(pageId) {
         const titleInput = document.querySelector('.calendar-page-title');
         const contentEditor = document.querySelector('.calendar-page-editor');
-        const startDateInput = document.querySelector('.calendar-page-start-date');
-        const endDateInput = document.querySelector('.calendar-page-end-date');
-        const allDayInput = document.querySelector('.calendar-page-all-day');
-        const assigneesContainer = document.querySelector(`#calendar-assignees-${pageId}`);
         
         if (titleInput && contentEditor) {
             const title = titleInput.value || 'Untitled';
             const content = contentEditor.innerHTML;
-            const startDate = startDateInput ? startDateInput.value : '';
-            const endDate = endDateInput ? endDateInput.value : '';
-            const allDay = allDayInput ? allDayInput.checked : true;
-            const assignees = assigneesContainer ? Array.from(assigneesContainer.querySelectorAll('.assignee-tag')).map(tag => tag.dataset.user) : [];
             
             // Find the calendar block and update the page data
             const block = document.querySelector('.calendar-block');
@@ -3077,23 +2764,12 @@ class SprintSpaceWorkspaceApp {
                 if (page) {
                     page.title = title;
                     page.content = content;
-                    page.startDate = startDate;
-                    page.endDate = endDate;
-                    page.allDay = allDay;
-                    page.assignees = assignees;
-                    // Update the main date field to match start date for calendar display
-                    page.date = startDate || page.date;
                     page.updatedAt = new Date().toLocaleDateString();
                     
                     // Re-render the calendar to show updated content
                     this.renderCalendar(block);
                 }
             }
-            
-            // Trigger auto-save to persist the changes
-            setTimeout(() => {
-                this.autoSavePage();
-            }, 100);
             
             // Show success message
             frappe.show_alert({
@@ -3984,7 +3660,7 @@ class SprintSpaceWorkspaceApp {
                     </select>
                 </div>
                 <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary" onclick="window.sprintSpaceApp.hideAssigneeModal()">Cancel</button>
+                    <button type="button" class="btn btn-secondary" onclick="window.sprintSpaceApp.hideModal()">Cancel</button>
                     <button type="button" class="btn btn-primary" id="create-task-btn" data-column="${columnStatus}">Create Task</button>
                 </div>
             </div>
@@ -4155,7 +3831,7 @@ class SprintSpaceWorkspaceApp {
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn btn-danger" onclick="window.sprintSpaceApp.deleteKanbanTask('${task.id}')">Delete</button>
-                    <button type="button" class="btn btn-secondary" onclick="window.sprintSpaceApp.hideAssigneeModal()">Cancel</button>
+                    <button type="button" class="btn btn-secondary" onclick="window.sprintSpaceApp.hideModal()">Cancel</button>
                     <button type="button" class="btn btn-primary" onclick="window.sprintSpaceApp.updateKanbanTask('${task.id}')">Update Task</button>
                 </div>
             </div>
@@ -4274,64 +3950,41 @@ class SprintSpaceWorkspaceApp {
         menu.id = 'block-context-menu';
         
         menu.innerHTML = `
-            <div class="menu-item" data-action="delete" data-block-id="${blockElement.id || Date.now()}">
+            <div class="menu-item" onclick="window.sprintSpaceApp.deleteBlock('${blockElement.id || Date.now()}')">
                 <span class="menu-icon">🗑️</span>
                 <span class="menu-text">Delete</span>
             </div>
-            <div class="menu-item" data-action="duplicate" data-block-id="${blockElement.id || Date.now()}">
+            <div class="menu-item" onclick="window.sprintSpaceApp.duplicateBlock('${blockElement.id || Date.now()}')">
                 <span class="menu-icon">📄</span>
                 <span class="menu-text">Duplicate</span>
             </div>
             <div class="menu-separator"></div>
-            <div class="menu-item" data-action="convert" data-block-id="${blockElement.id || Date.now()}" data-convert-to="paragraph">
+            <div class="menu-item" onclick="window.sprintSpaceApp.convertBlock('${blockElement.id || Date.now()}', 'paragraph')">
                 <span class="menu-icon">¶</span>
                 <span class="menu-text">Turn into Text</span>
             </div>
-            <div class="menu-item" data-action="convert" data-block-id="${blockElement.id || Date.now()}" data-convert-to="heading">
+            <div class="menu-item" onclick="window.sprintSpaceApp.convertBlock('${blockElement.id || Date.now()}', 'heading')">
                 <span class="menu-icon">H</span>
                 <span class="menu-text">Turn into Heading</span>
             </div>
-            <div class="menu-item" data-action="convert" data-block-id="${blockElement.id || Date.now()}" data-convert-to="list">
+            <div class="menu-item" onclick="window.sprintSpaceApp.convertBlock('${blockElement.id || Date.now()}', 'list')">
                 <span class="menu-icon">•</span>
                 <span class="menu-text">Turn into List</span>
             </div>
-            <div class="menu-item" data-action="convert" data-block-id="${blockElement.id || Date.now()}" data-convert-to="todolist">
+            <div class="menu-item" onclick="window.sprintSpaceApp.convertBlock('${blockElement.id || Date.now()}', 'todolist')">
                 <span class="menu-icon">📋</span>
                 <span class="menu-text">Turn into Todo</span>
             </div>
             <div class="menu-separator"></div>
-            <div class="menu-item" data-action="move-up" data-block-id="${blockElement.id || Date.now()}">
+            <div class="menu-item" onclick="window.sprintSpaceApp.moveBlockUp('${blockElement.id || Date.now()}')">
                 <span class="menu-icon">⬆️</span>
                 <span class="menu-text">Move up</span>
             </div>
-            <div class="menu-item" data-action="move-down" data-block-id="${blockElement.id || Date.now()}">
+            <div class="menu-item" onclick="window.sprintSpaceApp.moveBlockDown('${blockElement.id || Date.now()}')">
                 <span class="menu-icon">⬇️</span>
                 <span class="menu-text">Move down</span>
             </div>
         `;
-        
-        // Add event listeners to menu items
-        menu.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const menuItem = e.target.closest('.menu-item');
-            if (!menuItem) return;
-            
-            const action = menuItem.dataset.action;
-            const blockId = menuItem.dataset.blockId;
-            
-            if (action === 'delete') {
-                this.deleteBlock(blockId);
-            } else if (action === 'duplicate') {
-                this.duplicateBlock(blockId);
-            } else if (action === 'convert') {
-                const convertTo = menuItem.dataset.convertTo;
-                this.convertBlock(blockId, convertTo);
-            } else if (action === 'move-up') {
-                this.moveBlockUp(blockId);
-            } else if (action === 'move-down') {
-                this.moveBlockDown(blockId);
-            }
-        });
         
         // Assign ID if not present
         if (!blockElement.id) {
@@ -4642,61 +4295,51 @@ class SprintSpaceWorkspaceApp {
 
     async showAssigneeSelector(button) {
         const assigneesContainer = button.closest('.todo-assignees') || button.closest('.task-assignees');
-        const containerId = assigneesContainer.closest('.todo-item, .kanban-task') ? assigneesContainer.closest('.todo-item, .kanban-task').id || 'temp-' + Date.now() : 'temp-' + Date.now();
         
         try {
-            // Get company users
             const response = await frappe.call({
-                method: 'sprintspace.sprintspace.doctype.sprintspace_page.sprintspace_page.search_company_users',
-                args: { query: '' }
+                method: 'sprintspace.sprintspace.doctype.sprintspace_page.sprintspace_page.get_frappe_users'
             });
             
             const users = response.message || [];
-            const currentAssignees = Array.from(assigneesContainer.querySelectorAll('.assignee-tag')).map(tag => tag.dataset.user);
             
+            // Create user selection modal
             const modalHtml = `
-                <div class="assignee-selector-modal">
-                    <div class="assignee-selector-header">
-                        <h3>Select Assignees</h3>
-                        <button class="btn-close" onclick="window.sprintSpaceApp.hideAssigneeModal()">×</button>
+                <div class="assignee-selector">
+                    <h4>Select Assignees</h4>
+                    <div class="user-list">
+                        ${users.map(user => `
+                            <div class="user-option" data-user="${user.name}" onclick="window.sprintSpaceApp.toggleAssignee(this, '${assigneesContainer.closest('.todo-item, .kanban-task') ? assigneesContainer.closest('.todo-item, .kanban-task').id || 'temp-' + Date.now() : 'temp-' + Date.now()}')">
+                                <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(user.full_name || user.name)}&size=32&background=667eea&color=fff" alt="${user.full_name || user.name}" class="user-avatar">
+                                <span class="user-name">${user.full_name || user.name}</span>
+                                <span class="user-email">${user.email}</span>
+                                <input type="checkbox" class="user-checkbox">
+                            </div>
+                        `).join('')}
                     </div>
-                    <div class="assignee-selector-content">
-                        <div class="assignee-search">
-                            <input type="text" id="assignee-search" placeholder="Search users..." onkeyup="window.sprintSpaceApp.filterAssignees(this.value)">
-                        </div>
-                        <div class="assignee-list" id="assignee-list">
-                            ${users.map(user => `
-                                <div class="assignee-option ${currentAssignees.includes(user.full_name) ? 'selected' : ''}" 
-                                     data-user="${user.full_name}" 
-                                     data-email="${user.email}"
-                                     onclick="window.sprintSpaceApp.toggleAssignee('${containerId}', '${user.full_name}', '${user.email}')">
-                                    <img src="${user.user_image || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.full_name)}&size=32&background=667eea&color=fff`}" 
-                                         alt="${user.full_name}" class="assignee-option-avatar">
-                                    <div class="assignee-option-info">
-                                        <div class="assignee-option-name">${user.full_name}</div>
-                                        <div class="assignee-option-email">${user.email}</div>
-                                    </div>
-                                    <div class="assignee-option-checkbox">
-                                        <input type="checkbox" ${currentAssignees.includes(user.full_name) ? 'checked' : ''}>
-                                    </div>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-                    <div class="assignee-selector-footer">
-                        <button class="btn btn-primary" onclick="window.sprintSpaceApp.applyAssignees('${containerId}')">Apply</button>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-secondary" onclick="window.sprintSpaceApp.hideModal()">Cancel</button>
+                        <button type="button" class="btn btn-primary" onclick="window.sprintSpaceApp.applyAssignees('${assigneesContainer.closest('.todo-item, .kanban-task') ? assigneesContainer.closest('.todo-item, .kanban-task').id || 'temp-' + Date.now() : 'temp-' + Date.now()}')">Apply</button>
                     </div>
                 </div>
             `;
             
-            this.showAssigneeModal('Select Assignees', modalHtml);
+            this.showModalHTML('Select Assignees', modalHtml);
+            
+            // Mark currently assigned users
+            const currentAssignees = assigneesContainer.querySelectorAll('.assignee-tag');
+            currentAssignees.forEach(tag => {
+                const userName = tag.dataset.user;
+                const userOption = document.querySelector(`[data-user="${userName}"]`);
+                if (userOption) {
+                    userOption.querySelector('.user-checkbox').checked = true;
+                    userOption.classList.add('selected');
+                }
+            });
             
         } catch (error) {
             console.error('Error loading users:', error);
-            frappe.show_alert({
-                message: 'Failed to load users',
-                indicator: 'red'
-            });
+            this.showError('Failed to load users');
         }
     }
 
@@ -4707,13 +4350,12 @@ class SprintSpaceWorkspaceApp {
     }
 
     applyAssignees(taskId) {
-        const selectedOptions = document.querySelectorAll('.assignee-option.selected');
-        const assignees = Array.from(selectedOptions).map(option => option.dataset.user);
-        
+        const selectedUsers = document.querySelectorAll('.user-option.selected');
         const assigneesContainer = document.querySelector(`#${taskId} .todo-assignees, #${taskId} .task-assignees`);
         
         if (!assigneesContainer) {
             console.error('Assignees container not found for task:', taskId);
+            this.hideModal();
             return;
         }
         
@@ -4721,13 +4363,16 @@ class SprintSpaceWorkspaceApp {
         assigneesContainer.querySelectorAll('.assignee-tag').forEach(tag => tag.remove());
         
         // Add new assignee tags
-        assignees.forEach(assignee => {
+        selectedUsers.forEach(userOption => {
+            const userName = userOption.dataset.user;
+            const userFullName = userOption.querySelector('.user-name').textContent;
+            
             const assigneeTag = document.createElement('div');
             assigneeTag.className = 'assignee-tag';
-            assigneeTag.dataset.user = assignee;
+            assigneeTag.dataset.user = userName;
             assigneeTag.innerHTML = `
-                <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(assignee)}&size=24&background=667eea&color=fff" alt="${assignee}" class="assignee-avatar">
-                <span class="assignee-name">${assignee}</span>
+                <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(userFullName)}&size=24&background=667eea&color=fff" alt="${userFullName}" class="assignee-avatar">
+                <span class="assignee-name">${userFullName}</span>
                 <button class="remove-assignee" onclick="this.parentElement.remove()" title="Remove assignee">×</button>
             `;
             
@@ -4740,17 +4385,7 @@ class SprintSpaceWorkspaceApp {
             }
         });
         
-        // Don't close the modal - just update the button text briefly
-        const applyBtn = document.querySelector('.btn-primary');
-        if (applyBtn) {
-            const originalText = applyBtn.textContent;
-            applyBtn.textContent = '✓ Applied';
-            applyBtn.style.background = '#10b981';
-            setTimeout(() => {
-                applyBtn.textContent = originalText;
-                applyBtn.style.background = '';
-            }, 1500);
-        }
+        this.hideModal();
     }
 
     cycleTodoPriority(priorityElement) {
@@ -4802,13 +4437,13 @@ class SprintSpaceWorkspaceApp {
                         `).join('')}
                     </div>
                     <div class="modal-actions">
-                        <button type="button" class="btn btn-secondary" onclick="window.sprintSpaceApp.hideAssigneeModal()">Cancel</button>
+                        <button type="button" class="btn btn-secondary" onclick="window.sprintSpaceApp.hideModal()">Cancel</button>
                         <button type="button" class="btn btn-primary" onclick="window.sprintSpaceApp.applyKanbanAssignees()">Apply</button>
                     </div>
                 </div>
             `;
             
-            this.showAssigneeModal('Select Assignees', modalHtml);
+            this.showModalHTML('Select Assignees', modalHtml);
             
             // Mark currently assigned users
             const currentAssignees = document.querySelectorAll('#task-assignees .assignee-tag');
@@ -4894,7 +4529,7 @@ class SprintSpaceWorkspaceApp {
                     </select>
                 </div>
                 <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary" onclick="window.sprintSpaceApp.hideAssigneeModal()">Cancel</button>
+                    <button type="button" class="btn btn-secondary" onclick="window.sprintSpaceApp.hideModal()">Cancel</button>
                     <button type="button" class="btn btn-primary" id="create-task-btn" data-column="${columnStatus}">Create Task</button>
                 </div>
             </div>
@@ -4999,9 +4634,6 @@ class SprintSpaceWorkspaceApp {
         // Remove base64 data from media blocks to reduce size for saving
         this.stripBase64DataFromMediaBlocks(clonedEditor);
         
-        // Extract calendar and gallery data from blocks
-        this.extractBlockData(clonedEditor);
-        
         const html = clonedEditor.innerHTML || '';
         return {
             time: Date.now(),
@@ -5013,85 +4645,6 @@ class SprintSpaceWorkspaceApp {
             ],
             version: '2.30.7'
         };
-    }
-
-    extractBlockData(container) {
-        // Extract calendar block data
-        const calendarBlocks = container.querySelectorAll('.calendar-block');
-        calendarBlocks.forEach(block => {
-            const parentBlock = block.closest('.sprintspace-block');
-            if (parentBlock && block.calendarData) {
-                parentBlock.dataset.calendarData = JSON.stringify(block.calendarData);
-            }
-        });
-        
-        // Extract gallery block data
-        const galleryBlocks = container.querySelectorAll('.gallery-block');
-        galleryBlocks.forEach(block => {
-            const parentBlock = block.closest('.sprintspace-block');
-            if (parentBlock && block.galleryData) {
-                parentBlock.dataset.galleryData = JSON.stringify(block.galleryData);
-            }
-        });
-
-        // Extract timeline block data
-        const timelineBlocks = container.querySelectorAll('.timeline-block');
-        timelineBlocks.forEach(block => {
-            const parentBlock = block.closest('.sprintspace-block');
-            if (parentBlock && block.timelineData) {
-                parentBlock.dataset.timelineData = JSON.stringify(block.timelineData);
-            }
-        });
-    }
-
-    restoreBlockData(container) {
-        // Restore calendar block data
-        const calendarBlocks = container.querySelectorAll('.calendar-block');
-        calendarBlocks.forEach(block => {
-            const parentBlock = block.closest('.sprintspace-block');
-            if (parentBlock && parentBlock.dataset.calendarData) {
-                try {
-                    block.calendarData = JSON.parse(parentBlock.dataset.calendarData);
-                    console.log('Restored calendar data:', block.calendarData);
-                    // Re-render the calendar with restored data
-                    this.renderCalendar(block);
-                } catch (error) {
-                    console.warn('Failed to parse calendar data:', error);
-                }
-            }
-        });
-        
-        // Restore gallery block data
-        const galleryBlocks = container.querySelectorAll('.gallery-block');
-        galleryBlocks.forEach(block => {
-            const parentBlock = block.closest('.sprintspace-block');
-            if (parentBlock && parentBlock.dataset.galleryData) {
-                try {
-                    block.galleryData = JSON.parse(parentBlock.dataset.galleryData);
-                    console.log('Restored gallery data:', block.galleryData);
-                    // Re-render the gallery with restored data
-                    this.renderGallery(block);
-                } catch (error) {
-                    console.warn('Failed to parse gallery data:', error);
-                }
-            }
-        });
-
-        // Restore timeline block data
-        const timelineBlocks = container.querySelectorAll('.timeline-block');
-        timelineBlocks.forEach(block => {
-            const parentBlock = block.closest('.sprintspace-block');
-            if (parentBlock && parentBlock.dataset.timelineData) {
-                try {
-                    block.timelineData = JSON.parse(parentBlock.dataset.timelineData);
-                    console.log('Restored timeline data:', block.timelineData);
-                    // Re-render the timeline with restored data
-                    this.renderTimeline(block);
-                } catch (error) {
-                    console.warn('Failed to parse timeline data:', error);
-                }
-            }
-        });
     }
 
     stripBase64DataFromMediaBlocks(container) {
@@ -5350,298 +4903,6 @@ class SprintSpaceWorkspaceApp {
         console.log('Modal shown with HTML content and FORCED styles');
     }
 
-    showRightSideModal(title, html, options = {}) {
-        console.log('showRightSideModal called with title:', title);
-        
-        // Hide any existing modal first
-        this.hideModal();
-        
-        // Create right-side modal elements
-        const overlay = document.createElement('div');
-        overlay.id = 'right-modal-overlay';
-        overlay.className = 'right-modal-overlay';
-        
-        const modal = document.createElement('div');
-        modal.id = 'right-modal';
-        modal.className = 'right-modal';
-        
-        const header = document.createElement('div');
-        header.className = 'right-modal-header';
-        
-        const headerLeft = document.createElement('div');
-        headerLeft.className = 'right-modal-header-left';
-        
-        const expandBtn = document.createElement('button');
-        expandBtn.className = 'right-modal-expand';
-        expandBtn.innerHTML = '⛶';
-        expandBtn.title = 'Expand';
-        expandBtn.onclick = () => this.toggleRightModalFullscreen();
-        
-        const titleEl = document.createElement('h1');
-        titleEl.className = 'right-modal-title';
-        titleEl.textContent = title;
-        
-        headerLeft.appendChild(expandBtn);
-        headerLeft.appendChild(titleEl);
-        
-        const headerRight = document.createElement('div');
-        headerRight.className = 'right-modal-header-right';
-        
-        const closeBtn = document.createElement('button');
-        closeBtn.className = 'right-modal-close';
-        closeBtn.innerHTML = '✕';
-        closeBtn.title = 'Close';
-        closeBtn.onclick = () => this.hideModal();
-        
-        headerRight.appendChild(closeBtn);
-        
-        header.appendChild(headerLeft);
-        header.appendChild(headerRight);
-        
-        const contentEl = document.createElement('div');
-        contentEl.className = 'right-modal-content';
-        contentEl.innerHTML = html;
-        
-        modal.appendChild(header);
-        modal.appendChild(contentEl);
-        overlay.appendChild(modal);
-        document.body.appendChild(overlay);
-        
-        // Show modal with slide-in animation
-        setTimeout(() => {
-            overlay.classList.add('show');
-        }, 10);
-        
-        console.log('Right-side modal shown with HTML content');
-    }
-
-    toggleRightModalFullscreen() {
-        const modal = document.getElementById('right-modal');
-        if (modal) {
-            modal.classList.toggle('fullscreen');
-        }
-    }
-
-    showAssigneeModal(title, html) {
-        console.log('showAssigneeModal called with title:', title);
-        
-        // Hide any existing assignee modal first (but not the right-side modal)
-        const existingAssigneeModal = document.getElementById('assignee-modal-overlay');
-        if (existingAssigneeModal) {
-            existingAssigneeModal.remove();
-        }
-        
-        // Create modal elements with custom IDs to avoid conflicts
-        const overlay = document.createElement('div');
-        overlay.id = 'assignee-modal-overlay';
-        overlay.className = 'assignee-modal-overlay';
-        overlay.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: rgba(0, 0, 0, 0.6);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 9999999;
-            visibility: hidden;
-            opacity: 0;
-            transition: opacity 0.3s ease, visibility 0.3s ease;
-        `;
-        
-        const modal = document.createElement('div');
-        modal.id = 'assignee-modal';
-        modal.className = 'assignee-modal';
-        modal.style.cssText = `
-            background: white;
-            border-radius: 12px;
-            padding: 24px;
-            width: 500px;
-            max-width: 500px;
-            margin: 16px;
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
-            position: relative;
-            z-index: 9999999;
-            max-height: 90vh;
-            overflow-y: auto;
-        `;
-        
-        const titleEl = document.createElement('h2');
-        titleEl.id = 'assignee-modal-title';
-        titleEl.textContent = title;
-        titleEl.style.cssText = `
-            font-size: 18px;
-            font-weight: 600;
-            margin-bottom: 16px;
-            color: #1f2937;
-        `;
-        
-        const contentEl = document.createElement('div');
-        contentEl.id = 'assignee-modal-content';
-        contentEl.innerHTML = html;
-        contentEl.style.cssText = `
-            max-height: 70vh;
-            overflow-y: auto;
-        `;
-        
-        modal.appendChild(titleEl);
-        modal.appendChild(contentEl);
-        overlay.appendChild(modal);
-        document.body.appendChild(overlay);
-        
-        // Show modal with animation
-        setTimeout(() => {
-            overlay.style.visibility = 'visible';
-            overlay.style.opacity = '1';
-        }, 10);
-        
-        console.log('Assignee modal shown with HTML content');
-    }
-
-    hideAssigneeModal() {
-        console.log('hideAssigneeModal called');
-        const assigneeModalOverlay = document.getElementById('assignee-modal-overlay');
-        const assigneeModal = document.getElementById('assignee-modal');
-        
-        if (assigneeModalOverlay) {
-            assigneeModalOverlay.style.visibility = 'hidden';
-            assigneeModalOverlay.style.opacity = '0';
-            setTimeout(() => {
-                assigneeModalOverlay.remove();
-            }, 300);
-        }
-        
-        if (assigneeModal) {
-            assigneeModal.remove();
-        }
-        
-        console.log('Assignee modal hidden');
-    }
-
-    async showAssigneeSelector(containerId) {
-        try {
-            // Get company users
-            const response = await frappe.call({
-                method: 'sprintspace.sprintspace.doctype.sprintspace_page.sprintspace_page.search_company_users',
-                args: { query: '' }
-            });
-            
-            const users = response.message || [];
-            const container = document.getElementById(containerId);
-            const currentAssignees = Array.from(container.querySelectorAll('.assignee-tag')).map(tag => tag.dataset.user);
-            
-            const modalHtml = `
-                <div class="assignee-selector-modal">
-                    <div class="assignee-selector-header">
-                        <h3>Select Assignees</h3>
-                        <button class="btn-close" onclick="window.sprintSpaceApp.hideAssigneeModal()">×</button>
-                    </div>
-                    <div class="assignee-selector-content">
-                        <div class="assignee-search">
-                            <input type="text" id="assignee-search" placeholder="Search users..." onkeyup="window.sprintSpaceApp.filterAssignees(this.value)">
-                        </div>
-                        <div class="assignee-list" id="assignee-list">
-                            ${users.map(user => `
-                                <div class="assignee-option ${currentAssignees.includes(user.full_name) ? 'selected' : ''}" 
-                                     data-user="${user.full_name}" 
-                                     data-email="${user.email}"
-                                     onclick="window.sprintSpaceApp.toggleAssignee('${containerId}', '${user.full_name}', '${user.email}')">
-                                    <img src="${user.user_image || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.full_name)}&size=32&background=667eea&color=fff`}" 
-                                         alt="${user.full_name}" class="assignee-option-avatar">
-                                    <div class="assignee-option-info">
-                                        <div class="assignee-option-name">${user.full_name}</div>
-                                        <div class="assignee-option-email">${user.email}</div>
-                                    </div>
-                                    <div class="assignee-option-checkbox">
-                                        <input type="checkbox" ${currentAssignees.includes(user.full_name) ? 'checked' : ''}>
-                                    </div>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-                    <div class="assignee-selector-footer">
-                        <button class="btn btn-primary" onclick="window.sprintSpaceApp.applyAssignees('${containerId}')">Apply</button>
-                    </div>
-                </div>
-            `;
-            
-            this.showAssigneeModal('Select Assignees', modalHtml);
-            
-        } catch (error) {
-            console.error('Error loading users:', error);
-            frappe.show_alert({
-                message: 'Failed to load users',
-                indicator: 'red'
-            });
-        }
-    }
-
-    filterAssignees(query) {
-        const assigneeList = document.getElementById('assignee-list');
-        const options = assigneeList.querySelectorAll('.assignee-option');
-        
-        options.forEach(option => {
-            const name = option.querySelector('.assignee-option-name').textContent.toLowerCase();
-            const email = option.querySelector('.assignee-option-email').textContent.toLowerCase();
-            const searchQuery = query.toLowerCase();
-            
-            if (name.includes(searchQuery) || email.includes(searchQuery)) {
-                option.style.display = 'flex';
-            } else {
-                option.style.display = 'none';
-            }
-        });
-    }
-
-    toggleAssignee(containerId, userName, userEmail) {
-        const option = document.querySelector(`[data-user="${userName}"]`);
-        const checkbox = option.querySelector('input[type="checkbox"]');
-        checkbox.checked = !checkbox.checked;
-        option.classList.toggle('selected', checkbox.checked);
-    }
-
-    applyAssignees(containerId) {
-        const selectedOptions = document.querySelectorAll('.assignee-option.selected');
-        const assignees = Array.from(selectedOptions).map(option => option.dataset.user);
-        
-        const container = document.getElementById(containerId);
-        container.innerHTML = '';
-        
-        assignees.forEach(assignee => {
-            const assigneeTag = document.createElement('span');
-            assigneeTag.className = 'assignee-tag';
-            assigneeTag.dataset.user = assignee;
-            assigneeTag.innerHTML = `
-                <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(assignee)}&size=20&background=667eea&color=fff" alt="${assignee}" class="assignee-avatar">
-                <span class="assignee-name">${assignee}</span>
-                <button class="assignee-remove" onclick="window.sprintSpaceApp.removeAssignee('${containerId}', '${assignee}')">×</button>
-            `;
-            container.appendChild(assigneeTag);
-        });
-        
-        // Don't close the modal - just update the button text briefly
-        const applyBtn = document.querySelector('.btn-primary');
-        if (applyBtn) {
-            const originalText = applyBtn.textContent;
-            applyBtn.textContent = '✓ Applied';
-            applyBtn.style.background = '#10b981';
-            setTimeout(() => {
-                applyBtn.textContent = originalText;
-                applyBtn.style.background = '';
-            }, 1500);
-        }
-    }
-
-    removeAssignee(containerId, userName) {
-        const container = document.getElementById(containerId);
-        const assigneeTag = container.querySelector(`[data-user="${userName}"]`);
-        if (assigneeTag) {
-            assigneeTag.remove();
-        }
-    }
-
     showModal(config) {
         console.log('showModal called with config:', config);
         
@@ -5679,7 +4940,7 @@ class SprintSpaceWorkspaceApp {
             <form id="modal-form">
                 ${fieldsHTML}
                 <div class="modal-actions" style="display: flex; gap: 12px; justify-content: flex-end;">
-                    <button type="button" class="btn btn-secondary" onclick="window.sprintSpaceApp.hideAssigneeModal()">
+                    <button type="button" class="btn btn-secondary" onclick="window.sprintSpaceApp.hideModal()">
                         Cancel
                     </button>
                     <button type="submit" class="btn btn-primary">
@@ -5772,10 +5033,6 @@ class SprintSpaceWorkspaceApp {
         console.log('hideModal called');
         const modalOverlay = document.getElementById('modal-overlay');
         const modal = document.getElementById('modal');
-        const rightModalOverlay = document.getElementById('right-modal-overlay');
-        const rightModal = document.getElementById('right-modal');
-        const assigneeModalOverlay = document.getElementById('assignee-modal-overlay');
-        const assigneeModal = document.getElementById('assignee-modal');
         
         if (modalOverlay) {
             modalOverlay.classList.remove('show');
@@ -5786,27 +5043,6 @@ class SprintSpaceWorkspaceApp {
         if (modal) {
             // Use cssText to completely reset all styles
             modal.style.cssText = '';
-        }
-        
-        if (rightModalOverlay) {
-            rightModalOverlay.classList.remove('show');
-            rightModalOverlay.remove();
-        }
-        
-        if (rightModal) {
-            rightModal.remove();
-        }
-        
-        if (assigneeModalOverlay) {
-            assigneeModalOverlay.style.visibility = 'hidden';
-            assigneeModalOverlay.style.opacity = '0';
-            setTimeout(() => {
-                assigneeModalOverlay.remove();
-            }, 300);
-        }
-        
-        if (assigneeModal) {
-            assigneeModal.remove();
         }
         
         console.log('Modal hidden and styles cleared');
@@ -5979,9 +5215,6 @@ class SprintSpaceWorkspaceApp {
     // ==================== BLOCK MENU FUNCTIONALITY ====================
 
     showBlockMenu(event, block) {
-        console.log('showBlockMenu called with block:', block);
-        console.log('Block dataset:', block.dataset);
-        
         event.preventDefault();
         event.stopPropagation();
         
@@ -5992,36 +5225,22 @@ class SprintSpaceWorkspaceApp {
         const menu = document.createElement('div');
         menu.className = 'block-context-menu';
         menu.innerHTML = `
-            <div class="menu-item" data-action="duplicate">
+            <div class="menu-item" onclick="event.stopPropagation(); window.sprintSpaceApp.duplicateBlock('${block.dataset.blockType}', this)">
                 <span class="menu-icon">📋</span>
                 <span class="menu-text">Duplicate</span>
             </div>
-            <div class="menu-item danger" data-action="delete">
+            <div class="menu-item danger" onclick="event.stopPropagation(); window.sprintSpaceApp.deleteBlock(this)">
                 <span class="menu-icon">🗑️</span>
                 <span class="menu-text">Delete</span>
             </div>
         `;
-        
-        // Add event listeners to menu items
-        menu.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const menuItem = e.target.closest('.menu-item');
-            if (!menuItem) return;
-            
-            const action = menuItem.dataset.action;
-            if (action === 'duplicate') {
-                this.duplicateBlock(block.dataset.blockType, menuItem);
-            } else if (action === 'delete') {
-                this.deleteBlock(menuItem);
-            }
-        });
         
         // Position menu
         const rect = event.target.getBoundingClientRect();
         menu.style.position = 'fixed';
         menu.style.top = (rect.bottom + 5) + 'px';
         menu.style.left = rect.left + 'px';
-        menu.style.zIndex = '99999999';
+        menu.style.zIndex = '10001';
         
         // Store reference to the block
         menu.dataset.targetBlock = block.dataset.blockType;
@@ -6030,24 +5249,9 @@ class SprintSpaceWorkspaceApp {
         // Add to page
         document.body.appendChild(menu);
         
-        // Debug: Check if menu is visible
-        console.log('Menu created and added to DOM:', menu);
-        console.log('Menu position:', {
-            top: menu.style.top,
-            left: menu.style.left,
-            zIndex: menu.style.zIndex,
-            display: window.getComputedStyle(menu).display,
-            visibility: window.getComputedStyle(menu).visibility
-        });
-        
         // Hide menu when clicking outside
         setTimeout(() => {
-            document.addEventListener('click', (e) => {
-                // Don't hide if clicking on the menu itself
-                if (!menu.contains(e.target)) {
-                    this.hideBlockMenu();
-                }
-            }, { once: true });
+            document.addEventListener('click', this.hideBlockMenu.bind(this), { once: true });
         }, 10);
         
         console.log('Showed block menu for:', block.dataset.blockType);
@@ -6062,9 +5266,6 @@ class SprintSpaceWorkspaceApp {
     }
 
     deleteBlock(menuItem) {
-        console.log('deleteBlock called with menuItem:', menuItem);
-        console.log('currentMenuBlock:', this.currentMenuBlock);
-        
         if (!this.currentMenuBlock) {
             console.error('No block selected for deletion');
             return;
@@ -6124,9 +5325,6 @@ class SprintSpaceWorkspaceApp {
     }
 
     duplicateBlock(blockType, menuItem) {
-        console.log('duplicateBlock called with blockType:', blockType, 'menuItem:', menuItem);
-        console.log('currentMenuBlock:', this.currentMenuBlock);
-        
         if (!this.currentMenuBlock) {
             console.error('No block selected for duplication');
             return;

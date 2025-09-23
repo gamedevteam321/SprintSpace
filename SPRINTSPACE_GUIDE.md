@@ -118,6 +118,65 @@ Notes:
 - The grid is read‑only (no inputs there); edits happen in the drawer.
 - Task bars re‑render automatically when dates change.
 
+### Gallery View
+Card-based view with modal pages and nested content.
+
+Features:
+- **Grid/List View**: Toggle between card grid and list layouts
+- **Modal Pages**: Click any page to open it in a modal editor
+- **Nested Content**: Create pages within pages for organized content
+- **Quick Actions**: Add, edit, delete pages directly from the gallery
+
+Toolbar:
+- `+ Add page` creates a new page and opens it in a modal
+- View mode selector: Grid view / List view
+
+Page Modal:
+- Full-screen modal editor for page content
+- Editable title and rich text content
+- Save / Cancel actions
+- Auto-save functionality
+
+Use cases:
+- Project documentation with nested pages
+- Knowledge base with organized content
+- Team collaboration on structured content
+
+### Calendar View
+Monthly calendar view with date-based pages.
+
+Features:
+- **Monthly Grid**: Navigate through months with previous/next buttons
+- **Date-based Pages**: Create pages for specific dates
+- **Today Button**: Quick navigation to current date
+- **Page Indicators**: Visual indicators show which dates have pages
+
+Toolbar:
+- `Today` button to jump to current date
+- `‹` / `›` buttons for month navigation
+- `+ Add page` creates a page for today's date
+
+Calendar Day Modal:
+- Shows all pages for a selected date
+- Add new pages for that specific date
+- Edit or delete existing pages
+- Date-specific organization
+
+Page Modal:
+- Full-screen modal editor for page content
+- Editable title and rich text content
+- Start Date and End Date fields for event scheduling
+- All Day checkbox for all-day events
+- Save / Cancel actions
+- Auto-save functionality
+- Full slash command support for content creation
+
+Use cases:
+- Daily planning and journaling
+- Event planning and scheduling
+- Project milestones and deadlines
+- Team calendar with shared events
+
 ---
 
 ## Collaboration & Company Users
