@@ -2547,5 +2547,155 @@ h6[contenteditable="true"]:focus {
 .media-popover .mp-tab.active { background:#fff; border-color:#cbd5e1; box-shadow:0 1px 2px rgba(0,0,0,.06); }
 .media-popover .mp-pane { }
 .media-popover .mp-pane.hidden { display:none; }
+
+/* ==================== MENTION STYLES ==================== */
+
+/* Mention elements in content */
+.mention {
+    background: #e0e7ff;
+    color: #4f46e5;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 500;
+    font-size: 14px;
+    display: inline-block;
+    margin: 0 1px;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.mention:hover {
+    background: #c7d2fe;
+}
+
+/* Mention menu */
+.sprintspace-mention-menu {
+    position: absolute;
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+    z-index: 10000;
+    max-height: 200px;
+    overflow-y: auto;
+    min-width: 200px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.mention-option {
+    padding: 8px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid #f3f4f6;
+    transition: background-color 0.15s ease;
+}
+
+.mention-option:last-child {
+    border-bottom: none;
+}
+
+.mention-option:hover {
+    background-color: #f0f9ff;
+}
+
+.mention-option.selected {
+    background-color: #e0e7ff;
+}
+
+/* User avatar in mention menu */
+.mention-option .user-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #e5e7eb;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 500;
+    color: #6b7280;
+    flex-shrink: 0;
+}
+
+.mention-option .user-avatar.has-image {
+    background-size: cover;
+    background-position: center;
+}
+
+/* User info in mention menu */
+.mention-option .user-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+}
+
+.mention-option .user-name {
+    font-weight: 500;
+    color: #1f2937;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.2;
+}
+
+.mention-option .user-email {
+    color: #6b7280;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.2;
+    margin-top: 1px;
+}
+
+/* Mention in different contexts */
+.sprintspace-block .mention {
+    margin: 0 2px;
+}
+
+/* Mention in lists */
+.bullet-item .mention,
+.numbered-item .mention,
+.checklist-item .mention {
+    margin: 0 1px;
+}
+
+/* Mention in headings */
+h1 .mention,
+h2 .mention,
+h3 .mention {
+    font-size: inherit;
+    padding: 1px 4px;
+}
+
+/* Responsive mention menu */
+@media (max-width: 768px) {
+    .sprintspace-mention-menu {
+        min-width: 180px;
+        max-height: 150px;
+    }
+    
+    .mention-option {
+        padding: 6px 10px;
+    }
+    
+    .mention-option .user-avatar {
+        width: 20px;
+        height: 20px;
+        font-size: 10px;
+    }
+    
+    .mention-option .user-name {
+        font-size: 13px;
+    }
+    
+    .mention-option .user-email {
+        font-size: 11px;
+    }
+}
 .media-popover .mp-choose-file, .media-popover .mp-create { background:#2563eb; color:#fff; border:none; border-radius:8px; padding:10px 12px; font-weight:600; cursor:pointer; }
 .media-popover .mp-url { width:100%; border:1px solid #e5e7eb; border-radius:8px; padding:10px 12px; margin:0 0 10px 0; font-size:14px; }

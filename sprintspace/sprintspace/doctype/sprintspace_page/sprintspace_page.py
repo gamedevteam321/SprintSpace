@@ -211,6 +211,50 @@ def get_company_users():
 
 
 @frappe.whitelist()
+def search_company_users(query=""):
+    """Search for company users by name or email for @ mentions."""
+    user_company = frappe.db.get_value("User", frappe.session.user, "company") or frappe.db.get_default("company")
+    filters = {"enabled": 1, "user_type": "System User"}
+    if user_company:
+        filters["company"] = user_company
+    
+    # Search by full_name or email
+    search_conditions = []
+    if query:
+        search_conditions.append(f"full_name LIKE '%{query}%'")
+        search_conditions.append(f"email LIKE '%{query}%'")
+        search_conditions.append(f"name LIKE '%{query}%'")
+    
+    where_clause = ""
+    if search_conditions:
+        where_clause = " AND (" + " OR ".join(search_conditions) + ")"
+    
+    # Build the query
+    company_filter = f"company = '{user_company}'" if user_company else "1=1"
+    sql_query = f"""
+        SELECT name, full_name, email, user_image
+        FROM `tabUser` 
+        WHERE enabled = 1 
+        AND user_type = 'System User' 
+        AND {company_filter}
+        {where_clause}
+        ORDER BY full_name
+        LIMIT 10
+    """
+    
+    users = frappe.db.sql(sql_query, as_dict=True)
+    
+    # Add user image URLs
+    for user in users:
+        if user.get("user_image"):
+            user["image_url"] = frappe.utils.get_url() + user["user_image"]
+        else:
+            user["image_url"] = None
+    
+    return users
+
+
+@frappe.whitelist()
 def update_page_content(page_name, content_json):
     """Update the content of a page"""
     page = frappe.get_doc("SprintSpace Page", page_name)

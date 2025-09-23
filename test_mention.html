@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SprintSpace @ Mention Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .test-editor {
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 20px;
+            min-height: 200px;
+            font-size: 16px;
+            line-height: 1.5;
+        }
+        .test-editor:focus {
+            outline: none;
+            border-color: #4f46e5;
+        }
+        .mention {
+            background: #e0e7ff;
+            color: #4f46e5;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+        .sprintspace-mention-menu {
+            position: absolute;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+            z-index: 10000;
+            max-height: 200px;
+            overflow-y: auto;
+            min-width: 200px;
+        }
+        .mention-option {
+            padding: 8px 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        .mention-option:hover {
+            background-color: #f0f9ff;
+        }
+        .test-instructions {
+            background: #f0f9ff;
+            border: 1px solid #c7d2fe;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>SprintSpace @ Mention Test</h1>
+    
+    <div class="test-instructions">
+        <h3>Test Instructions:</h3>
+        <ol>
+            <li>Click in the editor below</li>
+            <li>Type <code>@</code> to trigger the mention menu</li>
+            <li>You should see a dropdown with user suggestions</li>
+            <li>Use arrow keys to navigate or click to select</li>
+        </ol>
+    </div>
+    
+    <div class="test-editor" contenteditable="true" id="test-editor">
+        Type @ to test mentions...
+    </div>
+    
+    <div id="debug-info" style="margin-top: 20px; padding: 10px; background: #f9fafb; border-radius: 4px; font-family: monospace; font-size: 12px;">
+        Debug info will appear here...
+    </div>
+
+    <script>
+        // Mock Frappe for testing
+        window.frappe = {
+            call: async function(options) {
+                console.log('Mock frappe.call:', options);
+                
+                // Mock user data
+                const mockUsers = [
+                    { name: 'Administrator', full_name: 'Administrator', email: 'admin@example.com', image_url: null },
+                    { name: 'john.doe', full_name: 'John Doe', email: 'john@example.com', image_url: null },
+                    { name: 'jane.smith', full_name: 'Jane Smith', email: 'jane@example.com', image_url: null }
+                ];
+                
+                // Filter users based on query
+                let filteredUsers = mockUsers;
+                if (options.args.query) {
+                    filteredUsers = mockUsers.filter(user => 
+                        user.full_name.toLowerCase().includes(options.args.query.toLowerCase()) ||
+                        user.email.toLowerCase().includes(options.args.query.toLowerCase()) ||
+                        user.name.toLowerCase().includes(options.args.query.toLowerCase())
+                    );
+                }
+                
+                return { message: filteredUsers };
+            }
+        };
+        
+        // Simplified mention functionality for testing
+        class TestMentionApp {
+            constructor() {
+                this.editor = document.getElementById('test-editor');
+                this.mentionState = {
+                    isShowingMentions: false,
+                    selectedMentionIndex: 0,
+                    mentionQuery: '',
+                    mentionPosition: null,
+                    mentionUsers: []
+                };
+                this.init();
+            }
+            
+            init() {
+                this.editor.addEventListener('input', (e) => this.handleInput(e));
+                this.editor.addEventListener('keydown', (e) => this.handleKeydown(e));
+                console.log('Test mention app initialized');
+            }
+            
+            handleInput(e) {
+                console.log('Input event triggered');
+                this.checkForMention();
+            }
+            
+            handleKeydown(e) {
+                if (e.key === '@' || e.key === 'Backspace' || e.key === 'Delete') {
+                    setTimeout(() => this.checkForMention(), 10);
+                }
+                
+                if (this.mentionState.isShowingMentions) {
+                    this.handleMentionKeydown(e);
+                }
+            }
+            
+            checkForMention() {
+                const selection = window.getSelection();
+                if (!selection.rangeCount) return;
+                
+                const range = selection.getRangeAt(0);
+                const textNode = range.startContainer;
+                
+                let text = '';
+                let cursorPos = 0;
+                
+                if (textNode.nodeType === Node.TEXT_NODE) {
+                    text = textNode.textContent;
+                    cursorPos = range.startOffset;
+                } else {
+                    text = textNode.textContent || '';
+                    cursorPos = text.length;
+                }
+                
+                console.log('Checking for mention in text:', text, 'at position:', cursorPos);
+                
+                const mentionMatch = this.findMentionPattern(text, cursorPos);
+                
+                if (mentionMatch) {
+                    console.log('Mention pattern found:', mentionMatch);
+                    this.showMentionMenu(mentionMatch.query, range);
+                } else {
+                    this.hideMentionMenu();
+                }
+            }
+            
+            findMentionPattern(text, cursorPos) {
+                let start = cursorPos - 1;
+                while (start >= 0 && text[start] !== '@' && text[start] !== ' ' && text[start] !== '\n') {
+                    start--;
+                }
+                
+                if (start < 0 || text[start] !== '@') {
+                    return null;
+                }
+                
+                const query = text.substring(start + 1, cursorPos);
+                return {
+                    start: start,
+                    end: cursorPos,
+                    query: query
+                };
+            }
+            
+            async showMentionMenu(query, range) {
+                try {
+                    console.log('Showing mention menu for query:', query);
+                    const response = await frappe.call({
+                        method: 'test',
+                        args: { query: query || '' }
+                    });
+                    
+                    const users = response.message || [];
+                    console.log('Found users:', users.length);
+                    
+                    if (users.length === 0) {
+                        this.hideMentionMenu();
+                        return;
+                    }
+                    
+                    this.mentionState.isShowingMentions = true;
+                    this.mentionState.mentionQuery = query;
+                    this.mentionState.mentionPosition = range;
+                    this.mentionState.mentionUsers = users;
+                    this.mentionState.selectedMentionIndex = 0;
+                    
+                    this.renderMentionMenu(users, range);
+                    
+                } catch (error) {
+                    console.error('Error showing mention menu:', error);
+                    this.hideMentionMenu();
+                }
+            }
+            
+            renderMentionMenu(users, range) {
+                this.hideMentionMenu();
+                
+                const mentionMenu = document.createElement('div');
+                mentionMenu.id = 'test-mention-menu';
+                mentionMenu.className = 'sprintspace-mention-menu';
+                
+                users.forEach((user, index) => {
+                    const userOption = document.createElement('div');
+                    userOption.className = 'mention-option';
+                    userOption.innerHTML = `
+                        <div style="width: 24px; height: 24px; border-radius: 50%; background: #e5e7eb; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 500; color: #6b7280;">
+                            ${(user.full_name || user.name || 'U').charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                            <div style="font-weight: 500; color: #1f2937; font-size: 14px;">${user.full_name || user.name}</div>
+                            <div style="color: #6b7280; font-size: 12px;">${user.email}</div>
+                        </div>
+                    `;
+                    
+                    if (index === 0) {
+                        userOption.style.backgroundColor = '#f0f9ff';
+                    }
+                    
+                    userOption.addEventListener('click', () => {
+                        this.selectMention(user, range);
+                    });
+                    
+                    userOption.addEventListener('mouseenter', () => {
+                        mentionMenu.querySelectorAll('.mention-option').forEach(opt => {
+                            opt.style.backgroundColor = '';
+                        });
+                        userOption.style.backgroundColor = '#f0f9ff';
+                        this.mentionState.selectedMentionIndex = index;
+                    });
+                    
+                    mentionMenu.appendChild(userOption);
+                });
+                
+                const rect = range.getBoundingClientRect();
+                const editorRect = this.editor.getBoundingClientRect();
+                
+                mentionMenu.style.left = `${rect.left - editorRect.left}px`;
+                mentionMenu.style.top = `${rect.bottom - editorRect.top + 5}px`;
+                
+                this.editor.appendChild(mentionMenu);
+                console.log('Mention menu rendered');
+            }
+            
+            handleMentionKeydown(e) {
+                const mentionMenu = document.getElementById('test-mention-menu');
+                if (!mentionMenu) return;
+                
+                const options = mentionMenu.querySelectorAll('.mention-option');
+                
+                switch (e.key) {
+                    case 'ArrowDown':
+                        e.preventDefault();
+                        this.mentionState.selectedMentionIndex = Math.min(
+                            this.mentionState.selectedMentionIndex + 1,
+                            options.length - 1
+                        );
+                        this.updateMentionSelection();
+                        break;
+                        
+                    case 'ArrowUp':
+                        e.preventDefault();
+                        this.mentionState.selectedMentionIndex = Math.max(
+                            this.mentionState.selectedMentionIndex - 1,
+                            0
+                        );
+                        this.updateMentionSelection();
+                        break;
+                        
+                    case 'Enter':
+                        e.preventDefault();
+                        if (this.mentionState.mentionUsers[this.mentionState.selectedMentionIndex]) {
+                            this.selectMention(
+                                this.mentionState.mentionUsers[this.mentionState.selectedMentionIndex],
+                                this.mentionState.mentionPosition
+                            );
+                        }
+                        break;
+                        
+                    case 'Escape':
+                        e.preventDefault();
+                        this.hideMentionMenu();
+                        break;
+                }
+            }
+            
+            updateMentionSelection() {
+                const mentionMenu = document.getElementById('test-mention-menu');
+                if (!mentionMenu) return;
+                
+                const options = mentionMenu.querySelectorAll('.mention-option');
+                options.forEach((option, index) => {
+                    if (index === this.mentionState.selectedMentionIndex) {
+                        option.style.backgroundColor = '#f0f9ff';
+                    } else {
+                        option.style.backgroundColor = '';
+                    }
+                });
+            }
+            
+            selectMention(user, range) {
+                console.log('Selecting mention for user:', user);
+                
+                const mentionElement = document.createElement('span');
+                mentionElement.className = 'mention';
+                mentionElement.textContent = `@${user.full_name || user.name}`;
+                mentionElement.setAttribute('data-user-id', user.name);
+                mentionElement.setAttribute('data-user-name', user.full_name || user.name);
+                mentionElement.setAttribute('data-user-email', user.email);
+                
+                // Get the current text content and cursor position
+                const textNode = range.startContainer;
+                const text = textNode.textContent;
+                const cursorPos = range.startOffset;
+                
+                // Find the @ symbol and everything after it to replace
+                let start = cursorPos - 1;
+                while (start >= 0 && text[start] !== '@' && text[start] !== ' ' && text[start] !== '\n') {
+                    start--;
+                }
+                
+                if (start >= 0 && text[start] === '@') {
+                    // Create a new range that includes the @ and everything after it
+                    const newRange = document.createRange();
+                    newRange.setStart(textNode, start);
+                    newRange.setEnd(textNode, cursorPos);
+                    
+                    // Replace the entire @query with the mention element
+                    newRange.deleteContents();
+                    newRange.insertNode(mentionElement);
+                    
+                    // Add space after mention
+                    const spaceNode = document.createTextNode(' ');
+                    newRange.setStartAfter(mentionElement);
+                    newRange.insertNode(spaceNode);
+                    
+                    // Move cursor after the space
+                    newRange.setStartAfter(spaceNode);
+                    newRange.setEndAfter(spaceNode);
+                    const selection = window.getSelection();
+                    selection.removeAllRanges();
+                    selection.addRange(newRange);
+                } else {
+                    // Fallback: just insert the mention at current position
+                    range.deleteContents();
+                    range.insertNode(mentionElement);
+                    
+                    // Add space after mention
+                    const spaceNode = document.createTextNode(' ');
+                    range.setStartAfter(mentionElement);
+                    range.insertNode(spaceNode);
+                    
+                    // Move cursor after the space
+                    range.setStartAfter(spaceNode);
+                    range.setEndAfter(spaceNode);
+                    const selection = window.getSelection();
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                }
+                
+                this.hideMentionMenu();
+                console.log('Mention selected:', user);
+            }
+            
+            hideMentionMenu() {
+                const mentionMenu = document.getElementById('test-mention-menu');
+                if (mentionMenu) {
+                    mentionMenu.remove();
+                }
+                
+                this.mentionState.isShowingMentions = false;
+                this.mentionState.mentionQuery = '';
+                this.mentionState.mentionPosition = null;
+                this.mentionState.mentionUsers = [];
+                this.mentionState.selectedMentionIndex = 0;
+            }
+        }
+        
+        // Initialize the test app
+        document.addEventListener('DOMContentLoaded', () => {
+            new TestMentionApp();
+        });
+    </script>
+</body>
+</html>

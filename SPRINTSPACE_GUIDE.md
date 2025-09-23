@@ -65,7 +65,15 @@ Task list that supports:
 - Assignee (select from company users)
 - Priority (cycles Low → Medium → High)
 - Due date (optional)
-Press Enter on a task to add a new one; use the “Add Todo” action to insert items.
+Press Enter on a task to add a new one; use the "Add Todo" action to insert items.
+
+### @ Mentions
+Mention users from your company in any text content:
+- Type `@` followed by a name or email to search for users
+- Use arrow keys to navigate the mention menu
+- Press Enter to select a user or click to choose
+- Mentions are highlighted and stored with user information
+- Only shows users from your company for security
 
 ### Table
 Lightweight table for tabular notes. Add rows/columns using the inline buttons. Cells are directly editable.
